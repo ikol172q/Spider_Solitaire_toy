@@ -6,6 +6,9 @@ on:
     tags:
       - 'v*'   # 例如 v0.1.0, v1.0.0
 
+permissions:
+  contents: write
+
 jobs:
   build:
     # 固定 Ubuntu 22.04 — Ubuntu 24 的 autoconf 与 python-for-android 的 libffi 不兼容

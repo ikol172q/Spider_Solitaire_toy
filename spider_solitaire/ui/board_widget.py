@@ -12,7 +12,7 @@ from .theme import (
     CARD_OVERLAP_CLOSED, CARD_OVERLAP_OPEN,
     EMPTY_SLOT_COLOR, BACKGROUND_COLOR,
     FONT_SIZE_SMALL, PADDING, MARGIN,
-    CARD_BACK_COLOR
+    CARD_BACK_COLOR, RED_SUIT_COLOR, BLACK_SUIT_COLOR
 )
 from .card_widget import CardWidget
 from ..game.card import SUITS
@@ -251,13 +251,14 @@ class BoardWidget(Widget):
                         top_x, top_y, stack_w, stack_h, self._cr * 0.6
                     ), width=1.2)
 
-                    # 在最上层显示 "A" + 花色符号
+                    # 在最上层显示 "A" + 花色符号（颜色与花色匹配）
                     suit = gs.completed[i][0].suit  # K→A 序列，第一张是 K
                     suit_sym = SUITS[suit]
+                    suit_color = RED_SUIT_COLOR if suit in ('heart', 'diamond') else BLACK_SUIT_COLOR
                     lbl_a = Label(
                         text=f'A\n{suit_sym}',
-                        font_size=stack_w * 0.35,
-                        color=(0.1, 0.1, 0.1, 1),
+                        font_size=stack_w * 0.40,
+                        color=suit_color,
                         size_hint=(None, None),
                         size=(stack_w, stack_h),
                         pos=(top_x, top_y),

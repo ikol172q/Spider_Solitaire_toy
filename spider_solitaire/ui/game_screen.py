@@ -11,7 +11,7 @@ from kivy.graphics import Color, Rectangle
 from .board_widget import BoardWidget
 from .theme import (
     STATUS_BAR_HEIGHT, BACKGROUND_COLOR, TEXT_COLOR, BUTTON_COLOR,
-    FONT_SIZE_LARGE, FONT_SIZE_TITLE, FONT_SIZE_NORMAL, PADDING
+    FONT_SIZE_LARGE, FONT_SIZE_TITLE, FONT_SIZE_NORMAL, FONT_SIZE_SMALL, PADDING
 )
 
 CJK = 'CJK'
@@ -52,7 +52,7 @@ class GameScreen(Screen):
         self._bg.pos = self.pos
         self._bg.size = self.size
 
-    # ---- 状态栏（纯数字用默认字体，中文用 CJK）----
+    # ---- 状态栏（标签+数值，双行布局）----
     def _build_status_bar(self):
         bar = BoxLayout(
             orientation='horizontal',
@@ -63,27 +63,47 @@ class GameScreen(Screen):
         score = gs.score if gs else 0
         moves = gs.moves if gs else 0
 
-        # 纯数字/ASCII 内容 → 默认字体即可
-        self.lbl_score = Label(
-            text=str(score), font_size=FONT_SIZE_NORMAL,
-            color=(1, 1, 1, 1), size_hint_x=0.25)
-        self.lbl_moves = Label(
-            text=str(moves), font_size=FONT_SIZE_NORMAL,
-            color=(1, 1, 1, 1), size_hint_x=0.25)
-        self.lbl_time = Label(
-            text='00:00', font_size=FONT_SIZE_NORMAL,
-            color=(1, 1, 1, 1), size_hint_x=0.25)
-
         diff_map = {'easy': '初级', 'medium': '中级', 'hard': '高级'}
         diff_txt = diff_map.get(gs.difficulty, '') if gs else ''
-        self.lbl_diff = Label(
-            text=diff_txt, font_name=CJK, font_size=FONT_SIZE_NORMAL,
-            color=(1, 1, 1, 1), size_hint_x=0.25)
 
-        bar.add_widget(self.lbl_score)
-        bar.add_widget(self.lbl_moves)
-        bar.add_widget(self.lbl_time)
-        bar.add_widget(self.lbl_diff)
+        # 每个指标用一个竖向 BoxLayout：上面标签，下面数值
+        self.lbl_score = Label(
+            text=str(score), font_size=FONT_SIZE_NORMAL * 1.1,
+            color=(1, 1, 0.7, 1), bold=True)
+        self.lbl_moves = Label(
+            text=str(moves), font_size=FONT_SIZE_NORMAL * 1.1,
+            color=(1, 1, 0.7, 1), bold=True)
+        self.lbl_time = Label(
+            text='00:00', font_size=FONT_SIZE_NORMAL * 1.1,
+            color=(1, 1, 0.7, 1), bold=True)
+        self.lbl_diff = Label(
+            text=diff_txt, font_name=CJK, font_size=FONT_SIZE_NORMAL * 1.1,
+            color=(1, 1, 0.7, 1), bold=True)
+
+        labels_and_values = [
+            ('得分', self.lbl_score),
+            ('步数', self.lbl_moves),
+            ('用时', self.lbl_time),
+            ('难度', self.lbl_diff),
+        ]
+
+        for label_txt, value_lbl in labels_and_values:
+            col = BoxLayout(orientation='vertical', size_hint_x=0.25)
+            header = Label(
+                text=label_txt, font_name=CJK,
+                font_size=FONT_SIZE_SMALL,
+                color=(0.75, 0.85, 0.75, 1),
+                size_hint_y=0.4,
+                halign='center', valign='bottom')
+            header.bind(size=header.setter('text_size'))
+            value_lbl.size_hint_y = 0.6
+            value_lbl.halign = 'center'
+            value_lbl.valign = 'top'
+            value_lbl.bind(size=value_lbl.setter('text_size'))
+            col.add_widget(header)
+            col.add_widget(value_lbl)
+            bar.add_widget(col)
+
         return bar
 
     # ---- 按钮栏 ----

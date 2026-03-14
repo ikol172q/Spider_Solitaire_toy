@@ -43,7 +43,7 @@ FONT_SIZE_SUIT = dp(20)                      # 花色符号大小
 # 其他尺寸
 BUTTON_WIDTH = dp(80)                        # 按钮宽度
 BUTTON_HEIGHT = dp(40)                       # 按钮高度
-STATUS_BAR_HEIGHT = dp(50)                   # 状态栏高度
+STATUS_BAR_HEIGHT = dp(56)                   # 状态栏高度（标签+数值双行）
 PADDING = dp(10)                             # 内边距
 MARGIN = dp(15)                              # 外边距
 

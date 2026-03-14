@@ -35,8 +35,8 @@ class CardWidget(Widget):
 
         # 根据卡牌宽度直接计算字体大小
         cw = self._card_width
-        self._font_rank = cw * 0.35       # 左上角级别+花色
-        self._font_suit = cw * 0.50        # 中央大花色符号
+        self._font_rank = cw * 0.45       # 左上角级别+花色（≈17dp on Mate40）
+        self._font_suit = cw * 0.62        # 中央大花色符号（≈23dp on Mate40）
 
         # 文字 Label 引用
         self._rank_label = None
