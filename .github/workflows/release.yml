@@ -68,6 +68,13 @@ jobs:
           restore-keys: |
             buildozer-${{ runner.os }}-
 
+      - name: Set version from git tag
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          sed -i "s/^version = .*/version = $VERSION/" buildozer.spec
+          echo "Set buildozer version to $VERSION"
+
       - name: Build APK with Buildozer
         run: |
           yes | buildozer android debug 2>&1 | tail -200
