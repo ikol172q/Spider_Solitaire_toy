@@ -20,11 +20,14 @@ CJK = 'CJK'
 class GameScreen(Screen):
     """游戏主界面"""
 
-    def __init__(self, game_state=None, on_menu_pressed=None, **kwargs):
+    def __init__(self, game_state=None, on_menu_pressed=None,
+                 on_game_won=None, **kwargs):
         super().__init__(**kwargs)
         self.game_state = game_state
         self._on_menu_cb = on_menu_pressed
+        self._on_game_won = on_game_won
         self._timer_event = None
+        self._win_shown = False
 
         root = BoxLayout(orientation='vertical')
         root.add_widget(self._build_status_bar())
@@ -158,21 +161,45 @@ class GameScreen(Screen):
 
     # ---- 胜利 ----
     def _show_win(self):
+        if self._win_shown:
+            return
+        self._win_shown = True
+
         if self._timer_event:
             self._timer_event.cancel()
             self._timer_event = None
 
+        # 通知 App 记录统计
+        if self._on_game_won:
+            self._on_game_won()
+
         gs = self.game_state
         m, s = divmod(gs.elapsed_time, 60)
 
-        content = BoxLayout(orientation='vertical', padding=20, spacing=15)
+        content = BoxLayout(orientation='vertical', padding=20, spacing=10)
         content.add_widget(Label(
             text='恭喜！你赢了！', font_name=CJK,
-            font_size=FONT_SIZE_LARGE, size_hint_y=0.3))
-        # 纯数字行
-        content.add_widget(Label(
-            text=f'{gs.score}  /  {gs.moves}  /  {m}:{s:02d}',
-            font_size=FONT_SIZE_NORMAL, size_hint_y=0.35))
+            font_size=FONT_SIZE_LARGE, size_hint_y=0.2))
+
+        # 带标签的统计信息（标签用 CJK，数值用默认）
+        stats_box = BoxLayout(orientation='vertical', size_hint_y=0.45, spacing=5)
+        for label_txt, value_txt in [
+            ('得分', str(gs.score)),
+            ('步数', str(gs.moves)),
+            ('用时', f'{m}:{s:02d}'),
+        ]:
+            row = BoxLayout(orientation='horizontal', spacing=10)
+            row.add_widget(Label(
+                text=label_txt, font_name=CJK,
+                font_size=FONT_SIZE_NORMAL, color=(0.8, 0.8, 0.8, 1),
+                size_hint_x=0.4, halign='right', valign='middle'))
+            row.children[0].text_size = (None, None)
+            row.add_widget(Label(
+                text=value_txt,
+                font_size=FONT_SIZE_NORMAL * 1.3, color=(1, 1, 0.7, 1),
+                size_hint_x=0.6, halign='left', valign='middle', bold=True))
+            stats_box.add_widget(row)
+        content.add_widget(stats_box)
 
         btns = BoxLayout(size_hint_y=0.35, spacing=10)
         popup = Popup(title='', content=content,

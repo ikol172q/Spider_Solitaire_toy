@@ -11,8 +11,10 @@ from kivy.core.window import Window
 from kivy.core.text import LabelBase
 
 from spider_solitaire.game.game_state import GameState
+from spider_solitaire.game.stats import GameStats
 from spider_solitaire.ui.menu_screen import MenuScreen
 from spider_solitaire.ui.game_screen import GameScreen
+from spider_solitaire.ui.stats_screen import StatsScreen
 
 # ---- 注册字体 ----
 # 1) DejaVuSans 替换默认 Roboto → Latin + 数字 + 符号（♠♥♦♣）
@@ -43,6 +45,7 @@ class SpiderSolitaireApp(App):
         self.game_state = None
         self.save_path = None
         self.sm = None  # ScreenManager
+        self.stats = None  # 统计
 
     def build(self):
         self.title = '蜘蛛纸牌'
@@ -54,6 +57,9 @@ class SpiderSolitaireApp(App):
         save_dir = os.path.expanduser('~/.spider_solitaire')
         os.makedirs(save_dir, exist_ok=True)
         self.save_path = os.path.join(save_dir, 'save.json')
+
+        # 统计
+        self.stats = GameStats()
 
         self.sm = ScreenManager()
         self._add_menu()
@@ -67,6 +73,7 @@ class SpiderSolitaireApp(App):
             name='menu',
             on_difficulty_selected=self._start_new,
             on_continue_game=self._continue,
+            on_stats_pressed=self._show_stats,
             has_saved_game=self._has_save()
         )
         self.sm.add_widget(menu)
@@ -76,7 +83,8 @@ class SpiderSolitaireApp(App):
         scr = GameScreen(
             name='game',
             game_state=self.game_state,
-            on_menu_pressed=self._back_to_menu
+            on_menu_pressed=self._back_to_menu,
+            on_game_won=self._on_game_won
         )
         self.sm.add_widget(scr)
 
@@ -105,6 +113,33 @@ class SpiderSolitaireApp(App):
         self._remove_screen('menu')
         self._add_menu()
         self.sm.current = 'menu'
+
+    def _show_stats(self):
+        self._remove_screen('stats')
+        scr = StatsScreen(
+            name='stats',
+            game_stats=self.stats,
+            on_back=self._back_from_stats
+        )
+        self.sm.add_widget(scr)
+        self.sm.current = 'stats'
+
+    def _back_from_stats(self):
+        self._remove_screen('stats')
+        self.sm.current = 'menu'
+
+    def _on_game_won(self):
+        """游戏胜利回调 — 记录统计"""
+        gs = self.game_state
+        if gs:
+            self.stats.record_game(
+                difficulty=gs.difficulty,
+                won=True,
+                score=gs.score,
+                moves=gs.moves,
+                elapsed_time=gs.elapsed_time,
+                completed_sets=len(gs.completed)
+            )
 
     # ========== 存档 ==========
 

@@ -19,10 +19,11 @@ class MenuScreen(Screen):
     """菜单界面"""
 
     def __init__(self, on_difficulty_selected=None, on_continue_game=None,
-                 has_saved_game=False, **kwargs):
+                 on_stats_pressed=None, has_saved_game=False, **kwargs):
         super().__init__(**kwargs)
         self.on_difficulty_selected = on_difficulty_selected
         self.on_continue_game = on_continue_game
+        self._on_stats_pressed = on_stats_pressed
 
         # 背景
         with self.canvas.before:
@@ -37,17 +38,17 @@ class MenuScreen(Screen):
         title_box = BoxLayout(orientation='vertical', size_hint_y=0.3, spacing=PADDING)
         title_box.add_widget(Label(
             text='蜘蛛纸牌', font_name=CJK,
-            font_size=FONT_SIZE_LARGE * 1.5,
+            font_size=FONT_SIZE_LARGE * 2.2,
             color=(1, 1, 1, 1), bold=True, size_hint_y=0.6))
         title_box.add_widget(Label(
-            text='Spider Solitaire', font_size=FONT_SIZE_TITLE,
+            text='Spider Solitaire', font_size=FONT_SIZE_TITLE * 1.5,
             color=(0.8, 0.9, 0.8, 1), size_hint_y=0.4))
         root.add_widget(title_box)
 
         # ---- 难度选择 ----
         diff_box = BoxLayout(orientation='vertical', size_hint_y=0.5, spacing=PADDING * 2)
         diff_box.add_widget(Label(
-            text='选择难度', font_name=CJK, font_size=FONT_SIZE_TITLE,
+            text='选择难度', font_name=CJK, font_size=FONT_SIZE_TITLE * 1.5,
             color=(1, 1, 1, 0.8), size_hint_y=0.15))
 
         buttons = [
@@ -57,7 +58,7 @@ class MenuScreen(Screen):
         ]
         for label, diff in buttons:
             btn = Button(
-                text=label, font_name=CJK, font_size=FONT_SIZE_NORMAL,
+                text=label, font_name=CJK, font_size=FONT_SIZE_NORMAL * 1.4,
                 background_color=BUTTON_COLOR, size_hint_y=0.28)
             btn.bind(on_press=lambda _, d=diff: self._select(d))
             diff_box.add_widget(btn)
@@ -67,14 +68,20 @@ class MenuScreen(Screen):
         # ---- 继续游戏 ----
         if has_saved_game:
             cont_btn = Button(
-                text='继续上次游戏', font_name=CJK, font_size=FONT_SIZE_NORMAL,
+                text='继续上次游戏', font_name=CJK, font_size=FONT_SIZE_NORMAL * 1.4,
                 background_color=(0.2, 0.6, 0.2, 1), size_hint_y=0.1)
             cont_btn.bind(on_press=lambda _: self._continue())
             root.add_widget(cont_btn)
         else:
             root.add_widget(BoxLayout(size_hint_y=0.1))
 
-        root.add_widget(BoxLayout(size_hint_y=0.1))
+        # ---- 历史记录按钮 ----
+        stats_btn = Button(
+            text='历史记录', font_name=CJK, font_size=FONT_SIZE_NORMAL * 1.4,
+            background_color=(0.3, 0.4, 0.6, 1), size_hint_y=0.1)
+        stats_btn.bind(on_press=lambda _: self._stats())
+        root.add_widget(stats_btn)
+
         self.add_widget(root)
 
     def _upd_bg(self, *a):
@@ -88,3 +95,7 @@ class MenuScreen(Screen):
     def _continue(self):
         if self.on_continue_game:
             self.on_continue_game()
+
+    def _stats(self):
+        if self._on_stats_pressed:
+            self._on_stats_pressed()

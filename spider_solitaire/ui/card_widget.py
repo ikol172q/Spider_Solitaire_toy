@@ -33,14 +33,13 @@ class CardWidget(Widget):
 
         self.size = (self._card_width, self._card_height)
 
-        # 根据卡牌大小缩放字体
-        scale = self._card_width / CARD_WIDTH if CARD_WIDTH > 0 else 1.0
-        self._font_small = FONT_SIZE_SMALL * scale
-        self._font_suit = FONT_SIZE_SUIT * scale
+        # 根据卡牌宽度直接计算字体大小
+        cw = self._card_width
+        self._font_rank = cw * 0.35       # 左上角级别+花色
+        self._font_suit = cw * 0.50        # 中央大花色符号
 
         # 文字 Label 引用
         self._rank_label = None
-        self._suit_label = None
         self._center_label = None
 
         self.bind(card=self._redraw)
@@ -64,11 +63,10 @@ class CardWidget(Widget):
 
     def _remove_labels(self):
         """移除旧的 Label"""
-        for lbl in (self._rank_label, self._suit_label, self._center_label):
+        for lbl in (self._rank_label, self._center_label):
             if lbl and lbl.parent == self:
                 self.remove_widget(lbl)
         self._rank_label = None
-        self._suit_label = None
         self._center_label = None
 
     def _get_suit_color(self):
@@ -99,34 +97,21 @@ class CardWidget(Widget):
         rank_name = RANK_NAMES[self.card.rank]
         color = self._get_suit_color()
 
-        # 左上角：级别
+        # 左上角：级别 + 花色（合并为一行，如 "K♠"）
         self._rank_label = Label(
-            text=rank_name,
-            font_size=self._font_small,
+            text=f'{rank_name}\n{suit_sym}',
+            font_size=self._font_rank,
             color=color,
             size_hint=(None, None),
-            size=(self.width * 0.4, self.height * 0.2),
-            pos=(self.x + 2, self.y + self.height * 0.75),
+            size=(self.width * 0.7, self.height * 0.5),
+            pos=(self.x + 1, self.y + self.height * 0.48),
             halign='left',
             valign='top',
-            bold=True
+            bold=True,
+            line_height=0.9
         )
         self._rank_label.text_size = self._rank_label.size
         self.add_widget(self._rank_label)
-
-        # 左上角花色小符号
-        self._suit_label = Label(
-            text=suit_sym,
-            font_size=self._font_small * 0.8,
-            color=color,
-            size_hint=(None, None),
-            size=(self.width * 0.4, self.height * 0.15),
-            pos=(self.x + 2, self.y + self.height * 0.58),
-            halign='left',
-            valign='top'
-        )
-        self._suit_label.text_size = self._suit_label.size
-        self.add_widget(self._suit_label)
 
         # 中央大花色符号
         self._center_label = Label(
@@ -134,8 +119,8 @@ class CardWidget(Widget):
             font_size=self._font_suit,
             color=color,
             size_hint=(None, None),
-            size=(self.width, self.height * 0.4),
-            pos=(self.x, self.y + self.height * 0.15),
+            size=(self.width, self.height * 0.45),
+            pos=(self.x, self.y + self.height * 0.02),
             halign='center',
             valign='middle'
         )

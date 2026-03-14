@@ -22,9 +22,9 @@ def is_valid_move(card_or_sequence, target_col):
     else:
         moving_card = card_or_sequence
 
-    # 目标列为空，只能放King
+    # 目标列为空，任何牌都可以放入（蜘蛛纸牌标准规则）
     if not target_col:
-        return moving_card.rank == 13
+        return True
 
     target_top_card = target_col[-1]
 

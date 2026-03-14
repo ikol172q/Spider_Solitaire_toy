@@ -82,24 +82,28 @@ class TestDeck(unittest.TestCase):
     """测试Deck模块"""
 
     def test_create_deck_easy(self):
-        """测试简单难度牌组创建"""
+        """测试简单难度牌组创建 — 1种随机花色，104张"""
         deck = create_deck('easy')
         self.assertEqual(len(deck), 104)
 
-        # 检查所有牌都是黑桃
-        spade_count = sum(1 for card in deck if card.suit == 'spade')
-        self.assertEqual(spade_count, 104)
+        # 应该只有1种花色
+        suits_used = set(c.suit for c in deck)
+        self.assertEqual(len(suits_used), 1)
+        # 且该花色必须是四种之一
+        self.assertTrue(suits_used.issubset({'spade', 'heart', 'diamond', 'club'}))
 
     def test_create_deck_medium(self):
-        """测试中等难度牌组创建"""
+        """测试中等难度牌组创建 — 2种随机花色，各52张"""
         deck = create_deck('medium')
         self.assertEqual(len(deck), 104)
 
-        spade_count = sum(1 for card in deck if card.suit == 'spade')
-        heart_count = sum(1 for card in deck if card.suit == 'heart')
-
-        self.assertEqual(spade_count, 52)
-        self.assertEqual(heart_count, 52)
+        suits_used = set(c.suit for c in deck)
+        self.assertEqual(len(suits_used), 2)
+        # 每种花色应该有52张
+        from collections import Counter
+        counts = Counter(c.suit for c in deck)
+        for suit, cnt in counts.items():
+            self.assertEqual(cnt, 52)
 
     def test_create_deck_hard(self):
         """测试困难难度牌组创建"""
@@ -145,12 +149,12 @@ class TestRules(unittest.TestCase):
 
         self.assertTrue(is_valid_move(king, empty_column))
 
-    def test_invalid_move_non_king_on_empty_column(self):
-        """测试在空列上放非King卡牌"""
+    def test_any_card_on_empty_column(self):
+        """测试在空列上放任意卡牌（蜘蛛纸牌规则允许）"""
         queen = Card('spade', 12, face_up=True)
         empty_column = []
 
-        self.assertFalse(is_valid_move(queen, empty_column))
+        self.assertTrue(is_valid_move(queen, empty_column))
 
     def test_valid_move_on_column(self):
         """测试在非空列上合法移动"""
