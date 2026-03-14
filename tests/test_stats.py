@@ -408,5 +408,84 @@ class TestGameStatsMerge(unittest.TestCase):
         self.assertEqual(len(GameStats._merge([], [{'ts': 1.0, 'difficulty': '', 'score': 0, 'moves': 0}])), 1)
 
 
+class TestStoragePathLogic(unittest.TestCase):
+    """测试跨平台存储路径逻辑"""
+
+    def test_default_backup_dir_desktop(self):
+        """桌面平台返回 home 下的备份目录"""
+        from spider_solitaire.game.stats import _get_default_backup_dir
+        d = _get_default_backup_dir()
+        # 在非 Android 环境下应该返回 home 下的目录
+        self.assertIn('.spider_solitaire_backup', d)
+        self.assertNotIn('/sdcard/', d)
+
+    def test_android_external_dir_returns_none_on_desktop(self):
+        """桌面平台无 jnius，_get_android_external_dir 返回 None"""
+        from spider_solitaire.game.stats import _get_android_external_dir
+        result = _get_android_external_dir()
+        self.assertIsNone(result)
+
+    def test_gamestats_uses_default_backup_dir(self):
+        """GameStats 默认使用 _get_default_backup_dir()"""
+        tmp = tempfile.NamedTemporaryFile(suffix='.json', delete=False)
+        tmp.close()
+        path = tmp.name
+        os.unlink(path)
+        try:
+            stats = GameStats(path=path)
+            # 不应是旧的硬编码 /sdcard/ 路径
+            self.assertNotEqual(stats._backup_dir, '/sdcard/SpiderSolitaire')
+        finally:
+            if os.path.isfile(path):
+                os.unlink(path)
+
+    def test_custom_backup_dir_override(self):
+        """传入 backup_dir 参数时应覆盖默认值"""
+        tmp = tempfile.NamedTemporaryFile(suffix='.json', delete=False)
+        tmp.close()
+        path = tmp.name
+        os.unlink(path)
+        try:
+            stats = GameStats(path=path, backup_dir='/custom/path')
+            self.assertEqual(stats._backup_dir, '/custom/path')
+        finally:
+            if os.path.isfile(path):
+                os.unlink(path)
+
+    def test_empty_backup_dir_disables_backup(self):
+        """空字符串 backup_dir 禁用备份"""
+        tmp = tempfile.NamedTemporaryFile(suffix='.json', delete=False)
+        tmp.close()
+        path = tmp.name
+        os.unlink(path)
+        try:
+            stats = GameStats(path=path, backup_dir='')
+            self.assertEqual(stats._backup_dir, '')
+            self.assertIsNone(stats._backup_path)
+        finally:
+            if os.path.isfile(path):
+                os.unlink(path)
+
+    def test_backup_with_real_temp_dir(self):
+        """备份到真实临时目录可以正常工作"""
+        tmp_dir = tempfile.mkdtemp()
+        primary = os.path.join(tmp_dir, 'primary', 'stats.json')
+        backup_dir = os.path.join(tmp_dir, 'backup')
+        try:
+            stats = GameStats(path=primary, backup_dir=backup_dir)
+            stats.record_game('easy', True, 500, 10, 60, 8)
+            # 主存储和备份都应存在
+            self.assertTrue(os.path.isfile(primary))
+            self.assertTrue(os.path.isfile(os.path.join(backup_dir, 'stats.json')))
+            # 内容一致
+            with open(primary) as f:
+                p_data = json.load(f)
+            with open(os.path.join(backup_dir, 'stats.json')) as f:
+                b_data = json.load(f)
+            self.assertEqual(len(p_data), len(b_data))
+        finally:
+            shutil.rmtree(tmp_dir)
+
+
 if __name__ == '__main__':
     unittest.main()

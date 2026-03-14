@@ -2,20 +2,53 @@
 
 数据双重持久化 + 时间戳合并策略：
 1. 主存储：应用私有目录 (~/.spider_solitaire/stats.json)
-2. 备份存储：Android 外部存储 (/sdcard/SpiderSolitaire/stats.json)
+2. 备份存储：Android app-specific 外部目录（通过 Context 获取），
+   桌面平台回退到 ~/.spider_solitaire_backup/
 
 每条记录都有唯一时间戳 (ts)。启动时读取两边数据，按 ts 去重合并，
 确保版本更新或重装后不丢失也不重复。
 """
 
 import os
+import sys
 import json
 import time
 
 
-# Android 外部存储备份路径
-_EXTERNAL_BACKUP_DIR = '/sdcard/SpiderSolitaire'
 _EXTERNAL_BACKUP_FILE = 'stats.json'
+
+
+def _get_android_external_dir():
+    """获取 Android app-specific 外部存储目录
+
+    使用 pyjnius 调用 Context.getExternalFilesDir()，
+    这个路径在 Android 10+ 也无需额外权限即可读写。
+    失败时返回 None。
+    """
+    try:
+        from jnius import autoclass
+        PythonActivity = autoclass('org.kivy.android.PythonActivity')
+        context = PythonActivity.mActivity
+        # getExternalFilesDir(null) → /storage/emulated/0/Android/data/<pkg>/files/
+        ext_dir = context.getExternalFilesDir(None)
+        if ext_dir:
+            return ext_dir.getAbsolutePath()
+    except Exception:
+        pass
+    return None
+
+
+def _get_default_backup_dir():
+    """根据平台返回默认备份目录"""
+    if sys.platform == 'android':
+        d = _get_android_external_dir()
+        if d:
+            return os.path.join(d, 'SpiderSolitaire')
+        # 回退：legacy /sdcard/ 路径（EMUI 旧版本可能需要）
+        return '/sdcard/SpiderSolitaire'
+    else:
+        # 桌面平台：使用 home 下的备份目录
+        return os.path.expanduser('~/.spider_solitaire_backup')
 
 
 class GameStats:
@@ -32,7 +65,7 @@ class GameStats:
             os.makedirs(d, exist_ok=True)
             path = os.path.join(d, 'stats.json')
         self.path = path
-        self._backup_dir = backup_dir if backup_dir is not None else _EXTERNAL_BACKUP_DIR
+        self._backup_dir = backup_dir if backup_dir is not None else _get_default_backup_dir()
         self.records = []
         self._load()
 

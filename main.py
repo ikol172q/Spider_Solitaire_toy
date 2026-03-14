@@ -4,6 +4,7 @@ Kivy + Buildozer 构建的蜘蛛纸牌游戏，目标设备：华为 Mate 40。
 """
 
 import os
+import sys
 import json
 from kivy.app import App
 from kivy.uix.screenmanager import ScreenManager
@@ -16,6 +17,9 @@ from spider_solitaire.ui.menu_screen import MenuScreen
 from spider_solitaire.ui.game_screen import GameScreen
 from spider_solitaire.ui.stats_screen import StatsScreen
 
+# ---- 平台检测 ----
+IS_ANDROID = sys.platform == 'android'
+
 # ---- 注册字体 ----
 # 1) DejaVuSans 替换默认 Roboto → Latin + 数字 + 符号（♠♥♦♣）
 # 2) DroidSansFallback 注册为 "CJK" → 中文字符
@@ -25,16 +29,35 @@ _DEJAVU = os.path.join(_KIVY_FONTS, 'DejaVuSans.ttf')
 if os.path.isfile(_DEJAVU):
     LabelBase.register(name='Roboto', fn_regular=_DEJAVU)
 
-_FONT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets', 'fonts')
-_CJK_FONT = os.path.join(_FONT_DIR, 'chinese.ttf')
-if os.path.isfile(_CJK_FONT):
+# 字体搜索路径：APK 打包后的路径可能不同，尝试多个位置
+_FONT_CANDIDATES = [
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets', 'fonts', 'chinese.ttf'),
+]
+if IS_ANDROID:
+    # Android APK 中 assets 可能在应用私有目录下
+    try:
+        from android.storage import app_storage_path  # noqa: F401
+        _FONT_CANDIDATES.append(
+            os.path.join(app_storage_path(), 'app', 'assets', 'fonts', 'chinese.ttf'))
+    except Exception:
+        pass
+
+_CJK_FONT = None
+for _candidate in _FONT_CANDIDATES:
+    if os.path.isfile(_candidate):
+        _CJK_FONT = _candidate
+        break
+
+if _CJK_FONT:
     LabelBase.register(name='CJK', fn_regular=_CJK_FONT)
+else:
+    print('警告: 未找到中文字体 chinese.ttf，中文可能显示为方块')
 
 # ---- 桌面调试时的窗口设置 ----
-# 华为 Mate 40 竖屏比例：1080×2376 ≈ 9:19.8
-# 桌面预览使用缩小版本
-PREVIEW_WIDTH = 420
-PREVIEW_HEIGHT = 920
+# 华为 Mate 40 横屏比例：2376×1080 ≈ 19.8:9
+# 桌面预览使用缩小版本（横屏优先）
+PREVIEW_WIDTH = 920
+PREVIEW_HEIGHT = 420
 
 
 class SpiderSolitaireApp(App):
@@ -50,8 +73,9 @@ class SpiderSolitaireApp(App):
     def build(self):
         self.title = '蜘蛛纸牌'
 
-        # 桌面调试窗口大小（Android 上会被忽略）
-        Window.size = (PREVIEW_WIDTH, PREVIEW_HEIGHT)
+        # 桌面调试窗口大小（仅桌面平台，Android 使用设备实际尺寸）
+        if not IS_ANDROID:
+            Window.size = (PREVIEW_WIDTH, PREVIEW_HEIGHT)
 
         # 存档路径
         save_dir = os.path.expanduser('~/.spider_solitaire')

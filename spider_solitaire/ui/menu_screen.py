@@ -31,11 +31,17 @@ class MenuScreen(Screen):
             self._bg = Rectangle(pos=self.pos, size=self.size)
         self.bind(pos=self._upd_bg, size=self._upd_bg)
 
-        # 主布局
+        # 主布局 — 用 AnchorLayout 确保内容在横屏时居中不拉伸
+        from kivy.uix.anchorlayout import AnchorLayout
+        anchor = AnchorLayout(anchor_x='center', anchor_y='center')
+
         root = BoxLayout(orientation='vertical', padding=PADDING * 3, spacing=PADDING * 2)
+        # 横屏时限制内容区宽度，避免按钮拉得太宽
+        root.size_hint_x = 1
+        self._menu_root = root
 
         # ---- 标题 ----
-        title_box = BoxLayout(orientation='vertical', size_hint_y=0.3, spacing=PADDING)
+        title_box = BoxLayout(orientation='vertical', size_hint_y=0.25, spacing=PADDING)
         title_box.add_widget(Label(
             text='蜘蛛纸牌', font_name=CJK,
             font_size=FONT_SIZE_LARGE * 2.2,
@@ -69,20 +75,28 @@ class MenuScreen(Screen):
         if has_saved_game:
             cont_btn = Button(
                 text='继续上次游戏', font_name=CJK, font_size=FONT_SIZE_NORMAL * 1.4,
-                background_color=(0.2, 0.6, 0.2, 1), size_hint_y=0.1)
+                background_color=(0.2, 0.6, 0.2, 1), size_hint_y=0.12)
             cont_btn.bind(on_press=lambda _: self._continue())
             root.add_widget(cont_btn)
         else:
-            root.add_widget(BoxLayout(size_hint_y=0.1))
+            root.add_widget(BoxLayout(size_hint_y=0.12))
 
         # ---- 历史记录按钮 ----
         stats_btn = Button(
             text='历史记录', font_name=CJK, font_size=FONT_SIZE_NORMAL * 1.4,
-            background_color=(0.3, 0.4, 0.6, 1), size_hint_y=0.1)
+            background_color=(0.3, 0.4, 0.6, 1), size_hint_y=0.12)
         stats_btn.bind(on_press=lambda _: self._stats())
         root.add_widget(stats_btn)
 
-        self.add_widget(root)
+        anchor.add_widget(root)
+        self.add_widget(anchor)
+        self.bind(size=self._on_size)
+
+    def _on_size(self, *a):
+        """横竖屏切换时调整菜单布局宽度"""
+        is_landscape = self.width > self.height
+        if hasattr(self, '_menu_root'):
+            self._menu_root.size_hint_x = 0.55 if is_landscape else 1
 
     def _upd_bg(self, *a):
         self._bg.pos = self.pos

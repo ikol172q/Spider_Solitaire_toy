@@ -29,30 +29,43 @@ class GameScreen(Screen):
         self._timer_event = None
         self._win_shown = False
 
-        root = BoxLayout(orientation='vertical')
-        root.add_widget(self._build_status_bar())
+        self._root = BoxLayout(orientation='vertical')
+        self._status_bar = self._build_status_bar()
+        self._root.add_widget(self._status_bar)
 
         self.board = BoardWidget()
         self.board.size_hint = (1, 1)
         self.board.on_state_updated = self._refresh_labels
-        root.add_widget(self.board)
+        self._root.add_widget(self.board)
 
-        root.add_widget(self._build_button_bar())
+        self._button_bar = self._build_button_bar()
+        self._root.add_widget(self._button_bar)
 
         with self.canvas.before:
             Color(*BACKGROUND_COLOR)
             self._bg = Rectangle(pos=self.pos, size=self.size)
         self.bind(pos=self._upd_bg, size=self._upd_bg)
 
-        self.add_widget(root)
+        self.add_widget(self._root)
         if self.game_state:
             self.board.set_game_state(self.game_state)
 
     def _upd_bg(self, *a):
         self._bg.pos = self.pos
         self._bg.size = self.size
+        is_landscape = self.width > self.height
+        if hasattr(self, '_status_bar'):
+            self._rebuild_status_bar_layout(is_landscape)
+        if hasattr(self, '_button_bar'):
+            btn_h = STATUS_BAR_HEIGHT * 0.78 if is_landscape else STATUS_BAR_HEIGHT
+            self._button_bar.height = btn_h
+            # 横屏时稍微增大按钮字体
+            _btn_fs = FONT_SIZE_NORMAL * 1.1 if is_landscape else FONT_SIZE_NORMAL
+            for child in self._button_bar.children:
+                if isinstance(child, Button):
+                    child.font_size = _btn_fs
 
-    # ---- 状态栏（标签+数值，双行布局）----
+    # ---- 状态栏 ----
     def _build_status_bar(self):
         bar = BoxLayout(
             orientation='horizontal',
@@ -66,7 +79,6 @@ class GameScreen(Screen):
         diff_map = {'easy': '初级', 'medium': '中级', 'hard': '高级'}
         diff_txt = diff_map.get(gs.difficulty, '') if gs else ''
 
-        # 每个指标用一个竖向 BoxLayout：上面标签，下面数值
         self.lbl_score = Label(
             text=str(score), font_size=FONT_SIZE_NORMAL * 1.1,
             color=(1, 1, 0.7, 1), bold=True)
@@ -80,14 +92,25 @@ class GameScreen(Screen):
             text=diff_txt, font_name=CJK, font_size=FONT_SIZE_NORMAL * 1.1,
             color=(1, 1, 0.7, 1), bold=True)
 
-        labels_and_values = [
+        self._status_labels = [
             ('得分', self.lbl_score),
             ('步数', self.lbl_moves),
             ('用时', self.lbl_time),
             ('难度', self.lbl_diff),
         ]
+        self._status_header_widgets = []
+        self._status_layout_mode = None  # 'portrait' or 'landscape'
 
-        for label_txt, value_lbl in labels_and_values:
+        # 初始布局（竖屏双行模式）
+        self._apply_status_portrait(bar)
+        return bar
+
+    def _apply_status_portrait(self, bar):
+        """竖屏：双行布局（上面标签，下面数值）"""
+        bar.clear_widgets()
+        bar.height = STATUS_BAR_HEIGHT
+        self._status_header_widgets = []
+        for label_txt, value_lbl in self._status_labels:
             col = BoxLayout(orientation='vertical', size_hint_x=0.25)
             header = Label(
                 text=label_txt, font_name=CJK,
@@ -97,14 +120,61 @@ class GameScreen(Screen):
                 halign='center', valign='bottom')
             header.bind(size=header.setter('text_size'))
             value_lbl.size_hint_y = 0.6
+            value_lbl.size_hint_x = 1
             value_lbl.halign = 'center'
             value_lbl.valign = 'top'
             value_lbl.bind(size=value_lbl.setter('text_size'))
             col.add_widget(header)
             col.add_widget(value_lbl)
             bar.add_widget(col)
+            self._status_header_widgets.append(header)
+        self._status_layout_mode = 'portrait'
 
-        return bar
+    def _apply_status_landscape(self, bar):
+        """横屏：单行布局（'得分：500  步数：0  用时：00:19  难度：初级'）"""
+        bar.clear_widgets()
+        bar.height = STATUS_BAR_HEIGHT * 0.62
+        bar.padding = [PADDING, 0, PADDING, 0]
+        self._status_header_widgets = []
+        _fs = FONT_SIZE_SMALL * 1.15
+        for label_txt, value_lbl in self._status_labels:
+            cell = BoxLayout(orientation='horizontal', size_hint_x=0.25)
+            header = Label(
+                text=label_txt + '：', font_name=CJK,
+                font_size=_fs,
+                color=(0.75, 0.85, 0.75, 1),
+                size_hint_x=0.5,
+                halign='right', valign='middle')
+            header.bind(size=header.setter('text_size'))
+            value_lbl.font_size = FONT_SIZE_NORMAL * 1.15
+            value_lbl.size_hint_y = 1
+            value_lbl.size_hint_x = 0.5
+            value_lbl.halign = 'left'
+            value_lbl.valign = 'middle'
+            value_lbl.bind(size=value_lbl.setter('text_size'))
+            cell.add_widget(header)
+            cell.add_widget(value_lbl)
+            bar.add_widget(cell)
+            self._status_header_widgets.append(header)
+        self._status_layout_mode = 'landscape'
+
+    def _detach_status_value_labels(self):
+        """将 value_lbl 从旧 parent 中安全移除（防止 re-parent 报错）"""
+        for _, value_lbl in self._status_labels:
+            if value_lbl.parent:
+                value_lbl.parent.remove_widget(value_lbl)
+
+    def _rebuild_status_bar_layout(self, is_landscape):
+        """根据方向切换状态栏布局（仅在方向真正变化时重建）"""
+        target = 'landscape' if is_landscape else 'portrait'
+        if self._status_layout_mode == target:
+            return
+        self._detach_status_value_labels()
+        bar = self._status_bar
+        if is_landscape:
+            self._apply_status_landscape(bar)
+        else:
+            self._apply_status_portrait(bar)
 
     # ---- 按钮栏 ----
     def _build_button_bar(self):
@@ -114,9 +184,9 @@ class GameScreen(Screen):
             padding=PADDING, spacing=PADDING
         )
         for text, cb, w in [
-            ('撤销', self._on_undo, 0.25),
-            ('新游戏', self._on_new_game, 0.25),
-            ('菜单', self._on_menu, 0.25),
+            ('撤销', self._on_undo, 0.2),
+            ('新游戏', self._on_new_game, 0.2),
+            ('菜单', self._on_menu, 0.2),
         ]:
             btn = Button(text=text, font_name=CJK,
                          font_size=FONT_SIZE_NORMAL,
@@ -129,10 +199,20 @@ class GameScreen(Screen):
         self._auto_btn = Button(
             text='自动：关', font_name=CJK,
             font_size=FONT_SIZE_NORMAL,
-            background_color=(0.4, 0.4, 0.4, 1),  # 灰色 = 关闭
-            size_hint_x=0.25)
+            background_color=(0.4, 0.4, 0.4, 1),
+            size_hint_x=0.2)
         self._auto_btn.bind(on_press=self._toggle_auto_move)
         bar.add_widget(self._auto_btn)
+
+        # 辅助牌信息 开关按钮（横屏时显示每列翻开牌的浮框）
+        self._hint_on = False
+        self._hint_btn = Button(
+            text='辅助：关', font_name=CJK,
+            font_size=FONT_SIZE_NORMAL,
+            background_color=(0.4, 0.4, 0.4, 1),
+            size_hint_x=0.2)
+        self._hint_btn.bind(on_press=self._toggle_card_hints)
+        bar.add_widget(self._hint_btn)
 
         return bar
 
@@ -140,13 +220,24 @@ class GameScreen(Screen):
         """切换点击自动移动开关"""
         self._auto_move_on = not self._auto_move_on
         if self._auto_move_on:
-            self._auto_btn.background_color = (0.2, 0.6, 0.2, 1)  # 绿色 = 开启
+            self._auto_btn.background_color = (0.2, 0.6, 0.2, 1)
             self._auto_btn.text = '自动：开'
         else:
-            self._auto_btn.background_color = (0.4, 0.4, 0.4, 1)  # 灰色 = 关闭
+            self._auto_btn.background_color = (0.4, 0.4, 0.4, 1)
             self._auto_btn.text = '自动：关'
-        # 同步到 board_widget
         self.board.auto_move_enabled = self._auto_move_on
+
+    def _toggle_card_hints(self, _btn):
+        """切换辅助牌信息浮框开关"""
+        self._hint_on = not self._hint_on
+        if self._hint_on:
+            self._hint_btn.background_color = (0.2, 0.5, 0.7, 1)
+            self._hint_btn.text = '辅助：开'
+        else:
+            self._hint_btn.background_color = (0.4, 0.4, 0.4, 1)
+            self._hint_btn.text = '辅助：关'
+        self.board.show_card_hints = self._hint_on
+        self.board.redraw()
 
     # ---- 刷新 ----
     def _refresh_labels(self):

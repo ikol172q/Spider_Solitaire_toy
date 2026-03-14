@@ -37,7 +37,11 @@ class StatsScreen(Screen):
             self._bg = Rectangle(pos=self.pos, size=self.size)
         self.bind(pos=self._upd_bg, size=self._upd_bg)
 
+        from kivy.uix.anchorlayout import AnchorLayout
+        anchor = AnchorLayout(anchor_x='center', anchor_y='center')
+
         root = BoxLayout(orientation='vertical', padding=PADDING * 2, spacing=PADDING)
+        self._stats_root = root
 
         # 标题
         root.add_widget(Label(
@@ -64,7 +68,14 @@ class StatsScreen(Screen):
         btn.bind(on_press=lambda *a: self._back())
         root.add_widget(btn)
 
-        self.add_widget(root)
+        anchor.add_widget(root)
+        self.add_widget(anchor)
+        self.bind(size=self._on_size)
+
+    def _on_size(self, *a):
+        is_landscape = self.width > self.height
+        if hasattr(self, '_stats_root'):
+            self._stats_root.size_hint_x = 0.6 if is_landscape else 1
 
     def on_enter(self):
         self._refresh()

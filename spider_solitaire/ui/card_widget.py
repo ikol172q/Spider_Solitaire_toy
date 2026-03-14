@@ -21,8 +21,10 @@ class CardWidget(Widget):
 
     card = ObjectProperty(None, allownone=True)
     selected = BooleanProperty(False)
+    dimmed = BooleanProperty(False)   # 低亮：已翻开但不可移动的牌
 
-    def __init__(self, card_width=None, card_height=None, card_radius=None, **kwargs):
+    def __init__(self, card_width=None, card_height=None, card_radius=None,
+                 compact=False, **kwargs):
         super().__init__(**kwargs)
         self.size_hint = (None, None)
 
@@ -30,13 +32,18 @@ class CardWidget(Widget):
         self._card_width = card_width if card_width is not None else CARD_WIDTH
         self._card_height = card_height if card_height is not None else CARD_HEIGHT
         self._card_radius = card_radius if card_radius is not None else CARD_RADIUS
+        self._compact = compact   # 横屏紧凑模式：字体缩小
 
         self.size = (self._card_width, self._card_height)
 
         # 根据卡牌宽度直接计算字体大小
         cw = self._card_width
-        self._font_rank = cw * 0.45       # 左上角级别+花色（≈17dp on Mate40）
-        self._font_suit = cw * 0.62        # 中央大花色符号（≈23dp on Mate40）
+        if compact:
+            self._font_rank = cw * 0.38
+            self._font_suit = cw * 0.50
+        else:
+            self._font_rank = cw * 0.45
+            self._font_suit = cw * 0.62
 
         # 文字 Label 引用
         self._rank_label = None
@@ -44,6 +51,7 @@ class CardWidget(Widget):
 
         self.bind(card=self._redraw)
         self.bind(selected=self._redraw)
+        self.bind(dimmed=self._redraw)
         self.bind(pos=self._redraw)
         self.bind(size=self._redraw)
 
@@ -78,9 +86,13 @@ class CardWidget(Widget):
     def _draw_face(self):
         """绘制卡牌正面"""
         r = self._card_radius
+        dim = self.dimmed
         with self.canvas:
-            # 白色背景
-            Color(*CARD_COLOR)
+            # 背景：低亮时用浅灰色
+            if dim:
+                Color(0.82, 0.82, 0.80, 1)
+            else:
+                Color(*CARD_COLOR)
             RoundedRectangle(pos=self.pos, size=self.size, radius=[r])
 
             # 选中高亮
@@ -95,9 +107,14 @@ class CardWidget(Widget):
         # 文字内容
         suit_sym = SUITS[self.card.suit]
         rank_name = RANK_NAMES[self.card.rank]
-        color = self._get_suit_color()
+        base_color = self._get_suit_color()
+        # 低亮时颜色变淡
+        if dim:
+            color = tuple(c * 0.5 + 0.3 for c in base_color[:3]) + (0.7,)
+        else:
+            color = base_color
 
-        # 左上角：级别 + 花色（合并为一行，如 "K♠"）
+        # 左上角：级别 + 花色
         self._rank_label = Label(
             text=f'{rank_name}\n{suit_sym}',
             font_size=self._font_rank,
