@@ -51,9 +51,9 @@ class MenuScreen(Screen):
             color=(1, 1, 1, 0.8), size_hint_y=0.15))
 
         buttons = [
-            ('初级 - 一种花色', 'easy'),
-            ('中级 - 两种花色', 'medium'),
-            ('高级 - 四种花色', 'hard'),
+            ('初级：一种花色', 'easy'),
+            ('中级：两种花色', 'medium'),
+            ('高级：四种花色', 'hard'),
         ]
         for label, diff in buttons:
             btn = Button(

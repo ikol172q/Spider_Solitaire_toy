@@ -178,15 +178,29 @@ class BoardWidget(Widget):
                 Color(0.3, 0.35, 0.6, 1)
                 Line(rounded_rectangle=(sx, sy, cw, ch, self._cr), width=1)
 
-            lbl = Label(
-                text=f'发牌\n({remaining})', font_name='CJK',
+            # 中文"发牌"用 CJK 字体
+            lbl_text = Label(
+                text='发牌', font_name='CJK',
                 font_size=FONT_SIZE_SMALL, color=(1, 1, 1, 1),
-                size_hint=(None, None), size=(cw, ch), pos=(sx, sy),
+                size_hint=(None, None), size=(cw, ch * 0.5),
+                pos=(sx, sy + ch * 0.4),
                 halign='center', valign='middle'
             )
-            lbl.text_size = lbl.size
-            self.add_widget(lbl)
-            self._extra_widgets.append(lbl)
+            lbl_text.text_size = lbl_text.size
+            self.add_widget(lbl_text)
+            self._extra_widgets.append(lbl_text)
+
+            # 数字用默认字体
+            lbl_num = Label(
+                text=str(remaining),
+                font_size=FONT_SIZE_SMALL, color=(1, 1, 1, 0.8),
+                size_hint=(None, None), size=(cw, ch * 0.35),
+                pos=(sx, sy + ch * 0.05),
+                halign='center', valign='middle'
+            )
+            lbl_num.text_size = lbl_num.size
+            self.add_widget(lbl_num)
+            self._extra_widgets.append(lbl_num)
             self._stock_area = (sx, sy, cw, ch)
         else:
             self._stock_area = None

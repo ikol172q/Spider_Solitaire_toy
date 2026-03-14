@@ -84,6 +84,44 @@ ls bin/spidersolitaire-1.0.0-arm64-v8a-debug.apk
 
 构建好的 APK 可以直接安装到华为 Mate 40 上运行。
 
+## 发布版本 (GitHub Releases)
+
+本项目已配置 GitHub Actions 自动构建。当推送版本标签时，会自动构建 APK 并创建 Release 页面（含下载链接）。
+
+### 自动发布流程
+
+```bash
+# 1. 确保代码已提交并推送
+git add -A
+git commit -m "你的提交信息"
+git push origin main
+
+# 2. 创建版本标签
+git tag v0.1.0
+
+# 3. 推送标签 → 触发自动构建
+git push origin v0.1.0
+```
+
+推送标签后，GitHub Actions 会自动：构建 APK → 创建 Release 页面 → 附上 APK 下载链接。
+
+进度可在仓库的 **Actions** 标签页查看，完成后在 **Releases** 页面即可下载 APK。
+
+### 手动发布
+
+也可以在 GitHub 网页上手动创建 Release：
+
+1. 进入仓库页面，点击右侧 **Releases**
+2. 点击 **Draft a new release**
+3. 在 "Choose a tag" 输入新标签名（如 `v0.1.0`）并创建
+4. 填写标题和说明
+5. 在底部 "Attach binaries" 区域上传本地构建好的 APK 文件
+6. 点击 **Publish release**
+
+### 版本号规范
+
+建议使用语义版本号：`v主版本.次版本.修订号`，例如 `v0.1.0`（首个测试版）、`v1.0.0`（正式版）。
+
 ## 技术栈
 
 - **Python 3.10+** — 游戏逻辑和界面
@@ -96,3 +134,6 @@ ls bin/spidersolitaire-1.0.0-arm64-v8a-debug.apk
 - 所有卡牌图形由代码绘制，无外部图片依赖
 - 花色符号使用 Unicode 字符（公共领域）
 - 蜘蛛纸牌是传统纸牌游戏，规则不受版权保护
+- 字体：DroidSansFallback（Apache License 2.0，免费）、DejaVuSans（Bitstream Vera License，免费）
+- Kivy 框架：MIT License（免费）
+- Buildozer：MIT License（免费）
