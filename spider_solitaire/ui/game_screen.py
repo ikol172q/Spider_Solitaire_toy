@@ -114,16 +114,39 @@ class GameScreen(Screen):
             padding=PADDING, spacing=PADDING
         )
         for text, cb, w in [
-            ('撤销', self._on_undo, 0.33),
-            ('新游戏', self._on_new_game, 0.33),
-            ('菜单', self._on_menu, 0.34),
+            ('撤销', self._on_undo, 0.25),
+            ('新游戏', self._on_new_game, 0.25),
+            ('菜单', self._on_menu, 0.25),
         ]:
             btn = Button(text=text, font_name=CJK,
                          font_size=FONT_SIZE_NORMAL,
                          background_color=BUTTON_COLOR, size_hint_x=w)
             btn.bind(on_press=cb)
             bar.add_widget(btn)
+
+        # 点击自动移动 开关按钮
+        self._auto_move_on = False
+        self._auto_btn = Button(
+            text='自动：关', font_name=CJK,
+            font_size=FONT_SIZE_NORMAL,
+            background_color=(0.4, 0.4, 0.4, 1),  # 灰色 = 关闭
+            size_hint_x=0.25)
+        self._auto_btn.bind(on_press=self._toggle_auto_move)
+        bar.add_widget(self._auto_btn)
+
         return bar
+
+    def _toggle_auto_move(self, _btn):
+        """切换点击自动移动开关"""
+        self._auto_move_on = not self._auto_move_on
+        if self._auto_move_on:
+            self._auto_btn.background_color = (0.2, 0.6, 0.2, 1)  # 绿色 = 开启
+            self._auto_btn.text = '自动：开'
+        else:
+            self._auto_btn.background_color = (0.4, 0.4, 0.4, 1)  # 灰色 = 关闭
+            self._auto_btn.text = '自动：关'
+        # 同步到 board_widget
+        self.board.auto_move_enabled = self._auto_move_on
 
     # ---- 刷新 ----
     def _refresh_labels(self):

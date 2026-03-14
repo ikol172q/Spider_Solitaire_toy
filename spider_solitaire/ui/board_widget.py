@@ -43,6 +43,11 @@ class BoardWidget(Widget):
         self._drag_idx = None
         self._drag_offset = (0, 0)
 
+        # 点击自动移动
+        self.auto_move_enabled = False
+        self._touch_start_pos = None   # 记录 touch_down 位置
+        self._TAP_THRESHOLD = dp(15)   # 移动 < 15dp 视为点击
+
         # 动画状态
         self._animating = False
 
@@ -456,6 +461,9 @@ class BoardWidget(Widget):
         if seq is None:
             return False
 
+        # 记录起始位置（用于区分点击 vs 拖拽）
+        self._touch_start_pos = (touch.x, touch.y)
+
         # 开始拖拽
         self._dragging = True
         self._drag_col = col
@@ -506,26 +514,71 @@ class BoardWidget(Widget):
         if not self._dragging:
             return False
 
-        target = self._find_target_column(touch.x)
         gs = self.game_state
+        from_col = self._drag_col
+        from_idx = self._drag_idx
+
+        # 判断是否为"点击"（手指几乎没移动）
+        is_tap = False
+        if self._touch_start_pos and self.auto_move_enabled:
+            sx, sy = self._touch_start_pos
+            dist = ((touch.x - sx) ** 2 + (touch.y - sy) ** 2) ** 0.5
+            is_tap = dist < self._TAP_THRESHOLD
 
         moved = False
-        if target is not None and target != self._drag_col:
-            # 记录完成数，用于检测是否刚完成一组
-            pre_done = len(gs.completed)
-            moved = gs.move_cards(self._drag_col, self._drag_idx, target)
+        if is_tap:
+            # 点击自动移动：随机选一个合法目标列
+            target = self._find_random_auto_target(from_col, from_idx)
+            if target is not None:
+                # 记录牌飞行前的位置信息
+                fly_infos = [
+                    info for info in self._card_map
+                    if info['col'] == from_col and info['idx'] >= from_idx
+                ]
+                src_positions = [(info['widget'], info['x'], info['y'])
+                                 for info in fly_infos]
 
-            if moved and len(gs.completed) > pre_done:
-                # 刚完成了一组！播放收集动画
-                self._dragging = False
-                self._drag_col = None
-                self._drag_idx = None
-                self._play_complete_animation(target, len(gs.completed) - 1)
-                return True
+                # 记录牌在目标列的起始索引（move 之前）
+                target_start_idx = len(gs.columns[target])
+
+                pre_done = len(gs.completed)
+                moved = gs.move_cards(from_col, from_idx, target)
+
+                if moved and len(gs.completed) > pre_done:
+                    self._dragging = False
+                    self._drag_col = None
+                    self._drag_idx = None
+                    self._touch_start_pos = None
+                    self._play_complete_animation(target, len(gs.completed) - 1)
+                    return True
+
+                if moved:
+                    # 播放飞牌动画
+                    self._dragging = False
+                    self._drag_col = None
+                    self._drag_idx = None
+                    self._touch_start_pos = None
+                    self._play_auto_move_animation(
+                        src_positions, target, target_start_idx)
+                    return True
+        else:
+            # 常规拖拽放置
+            target = self._find_target_column(touch.x)
+            if target is not None and target != from_col:
+                pre_done = len(gs.completed)
+                moved = gs.move_cards(from_col, from_idx, target)
+                if moved and len(gs.completed) > pre_done:
+                    self._dragging = False
+                    self._drag_col = None
+                    self._drag_idx = None
+                    self._touch_start_pos = None
+                    self._play_complete_animation(target, len(gs.completed) - 1)
+                    return True
 
         self._dragging = False
         self._drag_col = None
         self._drag_idx = None
+        self._touch_start_pos = None
         self.redraw()
 
         if moved:
@@ -544,6 +597,77 @@ class BoardWidget(Widget):
                 best_dist = d
                 best = i
         return best
+
+    def _find_random_auto_target(self, from_col, card_idx):
+        """为点击自动移动随机选一个合法目标列
+
+        收集所有合法目标，随机选一个返回。如果无合法移动返回 None。
+        """
+        import random as _rnd
+        gs = self.game_state
+        if not gs:
+            return None
+
+        moving_seq = gs.get_movable_sequence(from_col, card_idx)
+        if not moving_seq:
+            return None
+
+        candidates = []
+        for col_idx in range(10):
+            if col_idx == from_col:
+                continue
+            if gs.can_move(from_col, card_idx, col_idx):
+                candidates.append(col_idx)
+
+        if not candidates:
+            return None
+        return _rnd.choice(candidates)
+
+    def _play_auto_move_animation(self, src_positions, target_col, card_idx):
+        """点击自动移动的飞牌动画
+
+        参数：
+            src_positions: [(widget, src_x, src_y), ...] 原位置
+            target_col: 目标列索引
+            card_idx: 牌在目标列中的起始索引
+        """
+        self._animating = True
+
+        # 先 redraw 得到新布局（牌已经在目标列了）
+        self.redraw()
+
+        # 在新 _card_map 中找到这些牌的目标位置
+        gs = self.game_state
+        target_infos = [
+            info for info in self._card_map
+            if info['col'] == target_col and info['idx'] >= card_idx
+        ]
+
+        if not target_infos or len(target_infos) != len(src_positions):
+            # 安全回退：直接显示结果
+            self._animating = False
+            self._notify_state_updated()
+            return
+
+        # 把牌移到原始位置（动画起点）
+        for (_, src_x, src_y), info in zip(src_positions, target_infos):
+            info['widget'].pos = (src_x, src_y)
+
+        # 逐张飞到目标位置
+        total = len(target_infos)
+        for i, ((_, _, _), info) in enumerate(zip(src_positions, target_infos)):
+            w = info['widget']
+            tx, ty = info['x'], info['y']
+            anim = Animation(x=tx, y=ty, duration=0.2, t='out_quad')
+            if i == total - 1:
+                anim.bind(on_complete=lambda *a: self._on_auto_move_done())
+            Clock.schedule_once(
+                lambda dt, a=anim, ww=w: a.start(ww), i * 0.03)
+
+    def _on_auto_move_done(self):
+        """自动移动动画结束"""
+        self._animating = False
+        self._notify_state_updated()
 
     def _show_hint(self, text):
         """在屏幕中央短暂显示提示文字"""

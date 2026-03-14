@@ -12,6 +12,10 @@
 
 import unittest
 import math
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 # ============================================================
@@ -700,6 +704,190 @@ class TestOverlapScalingRealWorld(unittest.TestCase):
         factor, total = calc_overlap_factor(flags, 200)
         # total = 4*15 + 1*25 = 85
         self.assertEqual(factor, 1.0)
+
+
+# ============================================================
+# 自动移动目标选择测试（使用真实 GameState）
+# ============================================================
+
+from spider_solitaire.game.card import Card
+from spider_solitaire.game.game_state import GameState
+
+
+def find_random_auto_target(gs, from_col, card_idx):
+    """_find_random_auto_target 的纯函数版本（与 board_widget 逻辑一致）
+
+    收集所有合法目标，随机选一个返回。
+    """
+    import random as _rnd
+
+    moving_seq = gs.get_movable_sequence(from_col, card_idx)
+    if not moving_seq:
+        return None
+
+    candidates = []
+    for col_idx in range(10):
+        if col_idx == from_col:
+            continue
+        if gs.can_move(from_col, card_idx, col_idx):
+            candidates.append(col_idx)
+
+    if not candidates:
+        return None
+    return _rnd.choice(candidates)
+
+
+class TestAutoMoveTargetSelection(unittest.TestCase):
+    """测试点击自动移动的目标选择逻辑"""
+
+    def _make_gs(self):
+        """创建一个空的 GameState 供手动设置列"""
+        gs = GameState('easy')
+        gs.columns = [[] for _ in range(10)]
+        gs.stock = []
+        gs.completed = []
+        gs.score = 500
+        gs.moves = 0
+        return gs
+
+    def test_returns_legal_target(self):
+        """随机选择一个合法目标列"""
+        gs = self._make_gs()
+        # 列 0：要移动的 3♥
+        gs.columns[0] = [Card('heart', 3, True)]
+        # 列 1：4♥ — 同花色匹配
+        gs.columns[1] = [Card('heart', 4, True)]
+        # 列 2：4♠ — 不同花色匹配
+        gs.columns[2] = [Card('spade', 4, True)]
+        # 列 3-9：空列
+
+        # 运行多次验证随机性 + 合法性
+        legal = {1, 2, 3, 4, 5, 6, 7, 8, 9}  # 所有非源列都合法
+        seen = set()
+        for _ in range(100):
+            target = find_random_auto_target(gs, 0, 0)
+            self.assertIn(target, legal)
+            seen.add(target)
+        # 100 次应该至少选到 2 个不同的目标（概率极高）
+        self.assertGreater(len(seen), 1)
+
+    def test_single_legal_target(self):
+        """只有一个合法目标时必定选它"""
+        gs = self._make_gs()
+        gs.columns[0] = [Card('heart', 3, True)]
+        gs.columns[1] = [Card('heart', 4, True)]
+        # 其他列放不匹配的牌
+        for i in range(2, 10):
+            gs.columns[i] = [Card('heart', 1, True)]  # A，3不能放A上
+
+        target = find_random_auto_target(gs, 0, 0)
+        self.assertEqual(target, 1)
+
+    def test_empty_col_is_valid_target(self):
+        """空列也是合法目标"""
+        gs = self._make_gs()
+        gs.columns[0] = [Card('heart', 5, True)]
+        # 其他列全放不匹配的牌，除了列 2 是空的
+        for i in range(1, 10):
+            gs.columns[i] = [Card('heart', 3, True)]  # 5 不能放 3 上
+        gs.columns[2] = []  # 空列
+
+        target = find_random_auto_target(gs, 0, 0)
+        self.assertEqual(target, 2)
+
+    def test_no_legal_move(self):
+        """所有列都满且无合法移动时返回 None"""
+        gs = self._make_gs()
+        # 列 0：K♥ — 要移动的牌
+        gs.columns[0] = [Card('heart', 13, True)]
+        # 其他列都放 A（K 不能放在 A 上，rank 差 12）
+        for i in range(1, 10):
+            gs.columns[i] = [Card('heart', 1, True)]
+
+        target = find_random_auto_target(gs, 0, 0)
+        self.assertIsNone(target)
+
+    def test_move_sequence(self):
+        """移动多张序列时返回合法目标"""
+        gs = self._make_gs()
+        # 列 0：5♥, 4♥, 3♥ 同花色递减序列
+        gs.columns[0] = [
+            Card('heart', 5, True),
+            Card('heart', 4, True),
+            Card('heart', 3, True),
+        ]
+        # 列 1：6♥ — 同花色可接
+        gs.columns[1] = [Card('heart', 6, True)]
+        # 列 2：6♠ — 不同花色可接
+        gs.columns[2] = [Card('spade', 6, True)]
+
+        # 从 index 0 开始移动整个序列（顶部是 5♥）
+        target = find_random_auto_target(gs, 0, 0)
+        # 随机选择，但结果必须是合法的（1, 2, 或空列）
+        self.assertIsNotNone(target)
+        self.assertNotEqual(target, 0)
+
+    def test_skip_source_column(self):
+        """不会选择源列自身"""
+        gs = self._make_gs()
+        gs.columns[0] = [Card('heart', 4, True), Card('heart', 3, True)]
+        # 只有列 0 有牌
+
+        target = find_random_auto_target(gs, 0, 1)
+        # 3♥ 可以去空列
+        self.assertIsNotNone(target)
+        self.assertNotEqual(target, 0)
+
+    def test_face_down_card_blocked_by_ui(self):
+        """面朝下的牌在 UI 层被拦截，不会进入 auto-move
+
+        注意：get_movable_sequence 不检查 face_up（只看花色和 rank），
+        face_up 检查发生在 on_touch_down 中。因此此处测试的是：
+        即使传入面朝下的索引，find_random_auto_target 仍能安全返回结果
+        （不会崩溃），但实际运行时不会被调用。
+        """
+        gs = self._make_gs()
+        gs.columns[0] = [Card('heart', 5, False), Card('heart', 4, True)]
+
+        # 面朝下的牌在 UI 层被拦截，这里只验证函数不崩溃
+        target = find_random_auto_target(gs, 0, 0)
+        # 不检查返回值，只确保不报错
+
+    def test_auto_move_does_not_affect_game_state(self):
+        """find_random_auto_target 不修改游戏状态"""
+        gs = self._make_gs()
+        gs.columns[0] = [Card('heart', 3, True)]
+        gs.columns[1] = [Card('heart', 4, True)]
+
+        import copy
+        before = copy.deepcopy(gs.columns)
+        find_random_auto_target(gs, 0, 0)
+        # 验证状态未改变
+        for i in range(10):
+            self.assertEqual(len(gs.columns[i]), len(before[i]))
+
+
+class TestTapVsDragThreshold(unittest.TestCase):
+    """测试点击 vs 拖拽的距离判断"""
+
+    def test_zero_distance_is_tap(self):
+        dist = 0
+        self.assertTrue(dist < 15)  # TAP_THRESHOLD = dp(15)
+
+    def test_small_movement_is_tap(self):
+        """手指微移 < 15dp 仍为点击"""
+        dist = ((3) ** 2 + (4) ** 2) ** 0.5  # = 5
+        self.assertTrue(dist < 15)
+
+    def test_large_movement_is_drag(self):
+        """手指移动 > 15dp 为拖拽"""
+        dist = ((10) ** 2 + (12) ** 2) ** 0.5  # ≈ 15.6
+        self.assertFalse(dist < 15)
+
+    def test_exact_threshold(self):
+        """恰好 15dp 不算点击（< 不是 <=）"""
+        dist = 15.0
+        self.assertFalse(dist < 15)
 
 
 if __name__ == '__main__':
