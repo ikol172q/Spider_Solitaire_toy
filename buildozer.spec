@@ -7,7 +7,7 @@ package.domain = org.spidertoy
 
 # 源代码目录
 source.dir = .
-source.include_exts = py,png,jpg,kv,atlas,json
+source.include_exts = py,png,jpg,kv,atlas,json,ttf
 
 # 版本
 version = 1.0.0
@@ -31,8 +31,8 @@ android.sdk = 33
 # 架构 (Mate 40 是 ARM64)
 android.archs = arm64-v8a
 
-# 权限（蜘蛛纸牌不需要特殊权限）
-android.permissions =
+# 权限：外部存储读写（用于历史记录备份，防止重装丢失）
+android.permissions = WRITE_EXTERNAL_STORAGE, READ_EXTERNAL_STORAGE
 
 # 应用图标和启动画面（暂用默认）
 # icon.filename = %(source.dir)s/assets/icon.png
