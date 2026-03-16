@@ -13,7 +13,7 @@ source.include_exts = py,png,jpg,kv,atlas,json,ttf
 version = 1.0.0
 
 # 应用依赖
-requirements = python3,kivy==2.3.1
+requirements = python3,kivy==2.3.1,pyjnius,android
 
 # python-for-android 分支（与 Kivy 2.3.1 兼容）
 p4a.branch = develop
