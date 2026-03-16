@@ -25,7 +25,7 @@ orientation = landscape, portrait, landscape-reverse, portrait-reverse
 fullscreen = 1
 
 # Android 特定配置
-# 目标 Android API (Mate 40 支持 Android 10+)
+# 目标 Android API (Mate 30 支持 Android 10+)
 android.api = 33
 android.minapi = 24
 android.ndk = 25b
@@ -34,7 +34,7 @@ android.sdk = 33
 # 自动接受 SDK 许可协议（无需手动交互）
 android.accept_sdk_license = True
 
-# 架构 (Mate 40 是 ARM64)
+# 架构 (Mate 30 是 ARM64)
 android.archs = arm64-v8a
 
 # 权限：外部存储读写（用于历史记录备份，防止重装丢失）
