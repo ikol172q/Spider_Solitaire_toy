@@ -23,7 +23,7 @@ BUTTON_HOVER_COLOR = (0.3, 0.6, 0.3, 1)      # 按钮悬停颜色
 BUTTON_PRESS_COLOR = (0.1, 0.35, 0.1, 1)     # 按钮按下颜色
 
 # 卡牌尺寸（dp单位，相对大小）
-# 基准：Huawei Mate 40 - 2376×1080，宽度为410mm≈1080dp
+# 基准：Huawei Mate 30 - 2376×1080，宽度为410mm≈1080dp
 CARD_WIDTH = dp(60)                          # 卡牌宽度
 CARD_HEIGHT = dp(85)                         # 卡牌高度
 CARD_RADIUS = dp(4)                          # 圆角半径

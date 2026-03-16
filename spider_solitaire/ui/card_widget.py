@@ -4,6 +4,7 @@ from kivy.uix.widget import Widget
 from kivy.uix.label import Label
 from kivy.graphics import Color, RoundedRectangle, Line
 from kivy.properties import ObjectProperty, BooleanProperty
+from kivy.metrics import dp
 from .theme import (
     CARD_COLOR, CARD_BACK_COLOR, RED_SUIT_COLOR, BLACK_SUIT_COLOR,
     CARD_WIDTH, CARD_HEIGHT, CARD_RADIUS, FONT_SIZE_SUIT,
@@ -121,7 +122,7 @@ class CardWidget(Widget):
             color=color,
             size_hint=(None, None),
             size=(self.width * 0.7, self.height * 0.5),
-            pos=(self.x + 1, self.y + self.height * 0.48),
+            pos=(self.x + dp(1), self.y + self.height * 0.48),
             halign='left',
             valign='top',
             bold=True,
@@ -153,22 +154,24 @@ class CardWidget(Widget):
             RoundedRectangle(pos=self.pos, size=self.size, radius=[r])
 
             # 内部浅色边框
+            _inset = dp(3)
             Color(0.2, 0.25, 0.5, 1)
             Line(rounded_rectangle=(
-                self.x + 3, self.y + 3,
-                self.width - 6, self.height - 6, r
+                self.x + _inset, self.y + _inset,
+                self.width - _inset * 2, self.height - _inset * 2, r
             ), width=1.5)
 
             # 交叉纹样
+            _pad = dp(6)
             Color(0.15, 0.2, 0.45, 0.8)
-            step = max(6, int(self._card_width / 8))
-            x = self.x + 6
-            while x < self.x + self.width - 6:
-                Line(points=[x, self.y + 6, x, self.y + self.height - 6], width=1)
+            step = max(_pad, int(self._card_width / 8))
+            x = self.x + _pad
+            while x < self.x + self.width - _pad:
+                Line(points=[x, self.y + _pad, x, self.y + self.height - _pad], width=1)
                 x += step
-            y = self.y + 6
-            while y < self.y + self.height - 6:
-                Line(points=[self.x + 6, y, self.x + self.width - 6, y], width=1)
+            y = self.y + _pad
+            while y < self.y + self.height - _pad:
+                Line(points=[self.x + _pad, y, self.x + self.width - _pad, y], width=1)
                 y += step
 
             # 选中高亮

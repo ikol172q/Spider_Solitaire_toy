@@ -225,6 +225,7 @@ class GameScreen(Screen):
         else:
             self._auto_btn.background_color = (0.4, 0.4, 0.4, 1)
             self._auto_btn.text = '自动：关'
+        self._auto_btn.font_name = CJK  # 确保中文字体不丢失
         self.board.auto_move_enabled = self._auto_move_on
 
     def _toggle_card_hints(self, _btn):
@@ -236,6 +237,7 @@ class GameScreen(Screen):
         else:
             self._hint_btn.background_color = (0.4, 0.4, 0.4, 1)
             self._hint_btn.text = '辅助：关'
+        self._hint_btn.font_name = CJK  # 确保中文字体不丢失
         self.board.show_card_hints = self._hint_on
         self.board.redraw()
 

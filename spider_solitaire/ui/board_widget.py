@@ -652,6 +652,8 @@ class BoardWidget(Widget):
 
     def _on_deal_anim_done(self):
         """发牌动画结束"""
+        if not self.game_state:
+            return  # 旋转/退出后 widget 已销毁
         self._animating = False
         self._notify_state_updated()
 
@@ -715,6 +717,8 @@ class BoardWidget(Widget):
             if seq_i == total - 1:
                 # 最后一个动画完成时清理
                 def _finish(*a, widgets=fly_widgets):
+                    if not self.game_state:
+                        return  # 旋转/退出后 widget 已销毁
                     for ww in widgets:
                         if ww.parent == self:
                             self.remove_widget(ww)
@@ -1091,6 +1095,8 @@ class BoardWidget(Widget):
 
     def _on_auto_move_done(self):
         """自动移动动画结束"""
+        if not self.game_state:
+            return  # 旋转/退出后 widget 已销毁
         self._animating = False
         self._notify_state_updated()
 

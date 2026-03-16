@@ -64,11 +64,12 @@ jobs:
         with:
           path: |
             ~/.buildozer
-          key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
+          key: buildozer-${{ runner.os }}-${{ hashFiles('Spider_Solitaire_toy/buildozer.spec') }}
           restore-keys: |
             buildozer-${{ runner.os }}-
 
       - name: Set version from git tag
+        working-directory: Spider_Solitaire_toy
         run: |
           VERSION="${GITHUB_REF#refs/tags/v}"
           echo "VERSION=$VERSION" >> $GITHUB_ENV
@@ -76,6 +77,7 @@ jobs:
           echo "Set buildozer version to $VERSION"
 
       - name: Build APK with Buildozer
+        working-directory: Spider_Solitaire_toy
         run: |
           yes | buildozer android debug 2>&1 | tail -200
         timeout-minutes: 60
@@ -83,7 +85,7 @@ jobs:
       - name: Find APK file
         id: find_apk
         run: |
-          APK_PATH=$(find bin -name "*.apk" | head -1)
+          APK_PATH=$(find Spider_Solitaire_toy/bin -name "*.apk" | head -1)
           APK_NAME=$(basename "$APK_PATH")
           echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
           echo "apk_name=$APK_NAME" >> $GITHUB_OUTPUT

@@ -13,6 +13,10 @@ import os
 import sys
 import json
 import time
+try:
+    from kivy.utils import platform as _kivy_platform
+except ImportError:
+    _kivy_platform = sys.platform  # 测试环境回退
 
 
 _EXTERNAL_BACKUP_FILE = 'stats.json'
@@ -40,12 +44,13 @@ def _get_android_external_dir():
 
 def _get_default_backup_dir():
     """根据平台返回默认备份目录"""
-    if sys.platform == 'android':
+    if _kivy_platform == 'android':
         d = _get_android_external_dir()
         if d:
             return os.path.join(d, 'SpiderSolitaire')
-        # 回退：legacy /sdcard/ 路径（EMUI 旧版本可能需要）
-        return '/sdcard/SpiderSolitaire'
+        # 回退：不再使用 /sdcard（Android 10+ scoped storage 不允许）
+        # 返回 None，跳过备份
+        return None
     else:
         # 桌面平台：使用 home 下的备份目录
         return os.path.expanduser('~/.spider_solitaire_backup')
@@ -61,8 +66,20 @@ class GameStats:
 
     def __init__(self, path=None, backup_dir=None):
         if path is None:
-            d = os.path.expanduser('~/.spider_solitaire')
-            os.makedirs(d, exist_ok=True)
+            if _kivy_platform == 'android':
+                # Android 上用 Kivy App 的 user_data_dir
+                try:
+                    from kivy.app import App
+                    app = App.get_running_app()
+                    d = app.user_data_dir if app else os.path.expanduser('~/.spider_solitaire')
+                except Exception:
+                    d = os.path.expanduser('~/.spider_solitaire')
+            else:
+                d = os.path.expanduser('~/.spider_solitaire')
+            try:
+                os.makedirs(d, exist_ok=True)
+            except Exception:
+                pass
             path = os.path.join(d, 'stats.json')
         self.path = path
         self._backup_dir = backup_dir if backup_dir is not None else _get_default_backup_dir()

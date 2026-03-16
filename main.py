@@ -1,6 +1,6 @@
 """蜘蛛纸牌 - 应用入口
 
-Kivy + Buildozer 构建的蜘蛛纸牌游戏，目标设备：华为 Mate 40。
+Kivy + Buildozer 构建的蜘蛛纸牌游戏，目标设备：华为 Mate 30。
 """
 
 import os
@@ -18,7 +18,10 @@ from spider_solitaire.ui.game_screen import GameScreen
 from spider_solitaire.ui.stats_screen import StatsScreen
 
 # ---- 平台检测 ----
-IS_ANDROID = sys.platform == 'android'
+# 注意: Android 上 sys.platform 返回 'linux'，不是 'android'
+# 必须用 kivy.utils.platform 来正确检测
+from kivy.utils import platform as _kivy_platform
+IS_ANDROID = _kivy_platform == 'android'
 
 # ---- 注册字体 ----
 # 1) DejaVuSans 替换默认 Roboto → Latin + 数字 + 符号（♠♥♦♣）
@@ -29,18 +32,35 @@ _DEJAVU = os.path.join(_KIVY_FONTS, 'DejaVuSans.ttf')
 if os.path.isfile(_DEJAVU):
     LabelBase.register(name='Roboto', fn_regular=_DEJAVU)
 
+# 把 assets/fonts 加入 Kivy 资源搜索路径（确保 APK 打包后也能找到）
+from kivy.resources import resource_add_path, resource_find
+_APP_DIR = os.path.dirname(os.path.abspath(__file__))
+_ASSETS_FONTS = os.path.join(_APP_DIR, 'assets', 'fonts')
+if os.path.isdir(_ASSETS_FONTS):
+    resource_add_path(_ASSETS_FONTS)
+
 # 字体搜索路径：APK 打包后的路径可能不同，尝试多个位置
 _FONT_CANDIDATES = [
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets', 'fonts', 'chinese.ttf'),
+    os.path.join(_ASSETS_FONTS, 'chinese.ttf'),
 ]
 if IS_ANDROID:
-    # Android APK 中 assets 可能在应用私有目录下
+    # Android APK 中 assets 可能在多个位置
     try:
         from android.storage import app_storage_path  # noqa: F401
-        _FONT_CANDIDATES.append(
-            os.path.join(app_storage_path(), 'app', 'assets', 'fonts', 'chinese.ttf'))
+        _asp = app_storage_path()
+        _FONT_CANDIDATES.extend([
+            os.path.join(_asp, 'app', 'assets', 'fonts', 'chinese.ttf'),
+            os.path.join(_asp, 'assets', 'fonts', 'chinese.ttf'),
+        ])
     except Exception:
         pass
+# Kivy resource_find — 覆盖所有已注册的资源路径
+try:
+    _rf = resource_find('chinese.ttf')
+    if _rf:
+        _FONT_CANDIDATES.append(_rf)
+except Exception:
+    pass
 
 _CJK_FONT = None
 for _candidate in _FONT_CANDIDATES:
@@ -49,12 +69,22 @@ for _candidate in _FONT_CANDIDATES:
         break
 
 if _CJK_FONT:
-    LabelBase.register(name='CJK', fn_regular=_CJK_FONT)
-else:
-    print('警告: 未找到中文字体 chinese.ttf，中文可能显示为方块')
+    try:
+        LabelBase.register(name='CJK', fn_regular=_CJK_FONT)
+    except Exception as _e:
+        print(f'警告: 注册 CJK 字体失败: {_e}')
+        _CJK_FONT = None
+
+if not _CJK_FONT:
+    # Fallback: 用 DejaVuSans 注册为 CJK，避免 font_name='CJK' 崩溃
+    print('警告: 未找到中文字体 chinese.ttf，使用 DejaVuSans 替代（中文可能显示为方块）')
+    try:
+        LabelBase.register(name='CJK', fn_regular=_DEJAVU)
+    except Exception:
+        pass  # DejaVuSans 也失败则用 Kivy 默认字体
 
 # ---- 桌面调试时的窗口设置 ----
-# 华为 Mate 40 横屏比例：2376×1080 ≈ 19.8:9
+# 华为 Mate 30 横屏比例：2340×1080 ≈ 19.5:9
 # 桌面预览使用缩小版本（横屏优先）
 PREVIEW_WIDTH = 920
 PREVIEW_HEIGHT = 420
@@ -77,13 +107,22 @@ class SpiderSolitaireApp(App):
         if not IS_ANDROID:
             Window.size = (PREVIEW_WIDTH, PREVIEW_HEIGHT)
 
-        # 存档路径
-        save_dir = os.path.expanduser('~/.spider_solitaire')
-        os.makedirs(save_dir, exist_ok=True)
+        # 存档路径 — Android 用 Kivy user_data_dir，桌面用 ~/.spider_solitaire
+        if IS_ANDROID:
+            save_dir = self.user_data_dir  # Kivy 提供的 app-specific 目录
+        else:
+            save_dir = os.path.expanduser('~/.spider_solitaire')
+        try:
+            os.makedirs(save_dir, exist_ok=True)
+        except Exception as e:
+            print(f'警告: 创建存档目录失败: {e}')
+            save_dir = self.user_data_dir  # fallback
+            os.makedirs(save_dir, exist_ok=True)
         self.save_path = os.path.join(save_dir, 'save.json')
 
-        # 统计
-        self.stats = GameStats()
+        # 统计 — 使用同一目录
+        stats_path = os.path.join(save_dir, 'stats.json')
+        self.stats = GameStats(path=stats_path)
 
         self.sm = ScreenManager()
         self._add_menu()
