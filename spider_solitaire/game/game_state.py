@@ -121,6 +121,10 @@ class GameState:
         self.score -= 1
         self.moves += 1
 
+        # 发牌后检查是否有完成的序列
+        for col_idx in range(10):
+            self.check_complete(col_idx)
+
         return True
 
     def move_cards(self, from_col, card_index, to_col):
@@ -226,6 +230,9 @@ class GameState:
     def undo(self):
         """撤销上一步
 
+        注意：撤销不扣分（对休闲玩家更友好）。
+        经典 Windows 版每次撤销扣 1 分，但现代手机版通常不惩罚撤销。
+
         返回：
             True 如果撤销成功，False 如果历史栈为空
         """
@@ -280,6 +287,49 @@ class GameState:
 
         return None
 
+    def get_all_possible_moves(self):
+        """找到所有可能的移动，按质量排序
+
+        返回列表的元组: (from_col, card_idx, to_col, score)
+        Score: 更高 = 更好的移动
+        - 同花色堆叠: 100 分
+        - 非空目标: 10 分
+        - 空列: 5 分
+        """
+        moves = []
+        for from_col in range(10):
+            col = self.columns[from_col]
+            if not col:
+                continue
+            # 找到这一列中所有可移动序列的起始点
+            seen_starts = set()
+            for card_idx in range(len(col)):
+                if not col[card_idx].face_up:
+                    continue
+                seq = col[card_idx:]
+                if not is_movable_sequence(seq):
+                    continue
+                if card_idx in seen_starts:
+                    continue
+                seen_starts.add(card_idx)
+
+                for to_col in range(10):
+                    if to_col == from_col:
+                        continue
+                    if self.can_move(from_col, card_idx, to_col):
+                        score = 0
+                        target = self.columns[to_col]
+                        if target and target[-1].suit == seq[0].suit:
+                            score += 100
+                        elif target:
+                            score += 10
+                        else:
+                            score += 5
+                        moves.append((from_col, card_idx, to_col, score))
+
+        moves.sort(key=lambda x: -x[3])
+        return moves
+
     def to_dict(self):
         """序列化游戏状态为字典"""
         return {
@@ -311,6 +361,8 @@ class GameState:
         game.score = data['score']
         game.moves = data['moves']
         game.elapsed_time = data['elapsed_time']
+        # 恢复计时：start_time = 当前时间 - 已用时间，这样计时器继续计时
+        game.start_time = time.time() - game.elapsed_time
         return game
 
     def update_elapsed_time(self):

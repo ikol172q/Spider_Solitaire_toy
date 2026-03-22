@@ -12,7 +12,7 @@ from .theme import (
     CARD_OVERLAP_CLOSED, CARD_OVERLAP_OPEN,
     EMPTY_SLOT_COLOR, BACKGROUND_COLOR,
     FONT_SIZE_SMALL, PADDING, MARGIN,
-    CARD_BACK_COLOR, RED_SUIT_COLOR, BLACK_SUIT_COLOR
+    CARD_BACK_COLOR, RED_SUIT_COLOR, BLACK_SUIT_COLOR, SUIT_COLORS
 )
 from .card_widget import CardWidget
 from ..game.card import SUITS, RANK_NAMES
@@ -42,9 +42,10 @@ class BoardWidget(Widget):
         self._drag_col = None
         self._drag_idx = None
         self._drag_offset = (0, 0)
+        self._drag_widgets = []  # 被拖拽的 widget 信息（用于平滑拖动）
 
-        # 点击自动移动
-        self.auto_move_enabled = False
+        # 点击自动移动（经典蜘蛛纸牌核心交互，默认开启）
+        self.auto_move_enabled = True
         self._touch_start_pos = None   # 记录 touch_down 位置
         self._TAP_THRESHOLD = dp(15)   # 移动 < 15dp 视为点击
 
@@ -54,6 +55,11 @@ class BoardWidget(Widget):
         # 辅助牌信息浮框
         self.show_card_hints = False
         self._hint_widgets = []
+
+        # 移动提示系统
+        self._hint_moves = []      # 可能移动列表
+        self._hint_index = -1      # 当前显示的提示索引
+        self._hint_highlight = []  # 高亮 widget/canvas 指令
 
         # 极度压缩列 — 长按可弹出详情
         self._compressed_cols = set()
@@ -200,6 +206,7 @@ class BoardWidget(Widget):
         2. 如果总间距超出可用高度，优先压缩暗牌（最低到 dp(2)）
         3. 暗牌压到极限仍不够时，再等比压缩亮牌
         4. 亮牌最低不低于 dp(9)，保证可拖拽
+        5. 极度压缩（15+ 张牌）：暗牌 dp(1)，亮牌最低 dp(5)，但亮牌保持最少 dp(4) 可读性
 
         返回: list[float] — 每张牌(除最后一张)的实际间距
         """
@@ -215,8 +222,17 @@ class BoardWidget(Widget):
             ideal_closed = CARD_OVERLAP_CLOSED
             ideal_open = CARD_OVERLAP_OPEN
 
-        min_closed = dp(2)  # 暗牌最小间距
-        min_open = dp(9)    # 亮牌最小间距（保证可拖拽）
+        # 极度压缩检测：15+ 张牌
+        is_very_long = n >= 15
+
+        if is_very_long:
+            min_closed = dp(1)  # 极度压缩：暗牌最小 dp(1)
+            min_open = dp(9)    # 极度压缩：亮牌最小 dp(9)（保证可触摸+可读）
+            min_readable = dp(7)  # 亮牌可读性底线
+        else:
+            min_closed = dp(2)  # 正常压缩：暗牌最小间距
+            min_open = dp(9)    # 正常压缩：亮牌最小间距（保证可拖拽）
+            min_readable = dp(9)
 
         # 统计暗牌/亮牌数量（不含最后一张）
         closed_count = sum(1 for i in range(n - 1) if not column[i].face_up)
@@ -250,7 +266,12 @@ class BoardWidget(Widget):
             return [max(min_closed, each)] * (n - 1)
 
         open_each = remaining_for_open / open_count if open_count > 0 else 0
-        open_each = max(min_open, open_each)
+
+        # 对于极度压缩的列，保证最少可读性 dp(4)，否则使用 min_open
+        if is_very_long:
+            open_each = max(min_readable, min(open_each, min_open))
+        else:
+            open_each = max(min_open, open_each)
 
         return [open_each if column[i].face_up else actual_closed
                 for i in range(n - 1)]
@@ -325,12 +346,9 @@ class BoardWidget(Widget):
         suit_sym = SUITS[card.suit]
         text = f'{rank_str}{suit_sym}'
 
-        if card.suit in ('heart', 'diamond'):
-            color = RED_SUIT_COLOR
-        else:
-            color = BLACK_SUIT_COLOR
+        color = SUIT_COLORS.get(card.suit, BLACK_SUIT_COLOR)
 
-        font_sz = max(dp(8), min(visible_h * 0.75, cw * 0.22))
+        font_sz = max(dp(10), min(visible_h * 0.75, cw * 0.24))
         lbl = Label(
             text=text,
             font_size=font_sz,
@@ -445,7 +463,7 @@ class BoardWidget(Widget):
                     # 在最上层显示 "A" + 花色符号（颜色与花色匹配）
                     suit = gs.completed[i][0].suit  # K→A 序列，第一张是 K
                     suit_sym = SUITS[suit]
-                    suit_color = RED_SUIT_COLOR if suit in ('heart', 'diamond') else BLACK_SUIT_COLOR
+                    suit_color = SUIT_COLORS.get(suit, BLACK_SUIT_COLOR)
                     lbl_a = Label(
                         text=f'A\n{suit_sym}',
                         font_size=stack_w * 0.40,
@@ -606,28 +624,36 @@ class BoardWidget(Widget):
         if not gs or self._animating:
             return
 
-        # 记录发牌前每列的牌数
-        pre_counts = [len(col) for col in gs.columns]
+        # 记录发牌前状态
+        pre_completed = len(gs.completed)
 
         # 记录发牌堆位置
         stock_x = self.x + self.width - MARGIN - self._cw
         stock_y = self.y + PADDING
 
-        # 执行发牌
+        # 执行发牌（deal_row 内部会 check_complete，可能移除已完成序列）
         if not gs.deal_row():
             return
 
-        # 先正常重绘（新牌已在列中）
+        # 如果发牌触发了完成收集，直接重绘+播放完成动画（不播发牌动画）
+        if len(gs.completed) > pre_completed:
+            self.redraw()
+            self._play_complete_animation(0, len(gs.completed) - 1)
+            return
+
+        # 正常重绘（新牌已在列中）
         self.redraw()
 
-        # 找到每列新发的那张牌（最后一张）
+        # 找到每列最后一张牌（新发的牌）
         fly_widgets = []
         fly_targets = []
         for col_idx in range(10):
-            new_idx = pre_counts[col_idx]  # 新牌在列中的 index
-            # 在 _card_map 中找到它
+            col = gs.columns[col_idx]
+            if not col:
+                continue
+            last_idx = len(col) - 1
             for info in self._card_map:
-                if info['col'] == col_idx and info['idx'] == new_idx:
+                if info['col'] == col_idx and info['idx'] == last_idx:
                     fly_widgets.append(info['widget'])
                     fly_targets.append((info['x'], info['y']))
                     break
@@ -786,18 +812,13 @@ class BoardWidget(Widget):
 
             # 深色背景上使用亮色文字（支持四花色）
             is_movable = idx >= movable_start
-            # 四花色亮色方案
-            suit_bright = {
-                'heart':   (1.0, 0.4, 0.4, 1.0),    # 亮红
-                'diamond': (1.0, 0.5, 0.25, 1.0),    # 亮橙红
-                'club':    (1.0, 1.0, 1.0, 1.0),     # 白色
-                'spade':   (0.7, 0.85, 1.0, 1.0),    # 亮蓝白
-            }
-            bright = suit_bright.get(card.suit, (1.0, 1.0, 1.0, 1.0))
+            # 从 SUIT_COLORS 派生亮色方案（提高亮度）
+            base_color = SUIT_COLORS.get(card.suit, (1.0, 1.0, 1.0, 1.0))
+            bright = tuple(min(1.0, c * 1.3) for c in base_color[:3]) + (1.0,)
             if is_movable:
                 lbl_color = bright
             else:
-                # 不可移动：保持同色系但降低亮度，alpha 0.8（比之前 0.55 亮很多）
+                # 不可移动：降低亮度
                 lbl_color = tuple(c * 0.6 for c in bright[:3]) + (0.8,)
 
             lbl = Label(
@@ -848,8 +869,9 @@ class BoardWidget(Widget):
         if self._stock_area:
             sx, sy, sw, sh = self._stock_area
             if sx <= touch.x <= sx + sw and sy <= touch.y <= sy + sh:
-                # 检查是否有空列
-                if any(len(col) == 0 for col in self.game_state.columns):
+                if len(self.game_state.stock) < 10:
+                    self._show_hint('没有更多牌了')
+                elif any(len(col) == 0 for col in self.game_state.columns):
                     self._show_hint('请先填满所有空列')
                 else:
                     self._deal_with_animation()
@@ -874,13 +896,16 @@ class BoardWidget(Widget):
 
         seq = self.game_state.get_movable_sequence(col, idx)
         if seq is None:
-            # 即使不可移动，如果列是压缩的，也启动长按检测
+            # 牌被"锁住"了（上面有不同花色的牌）
+            # 给玩家反馈：轻微抖动该牌，让玩家知道"这张牌现在被锁住了"
+            self._play_shake_feedback(col, idx)
+            # 压缩列也启动长按检测
             if col in self._compressed_cols:
                 self._cancel_long_press()
                 self._long_press_event = Clock.schedule_once(
                     lambda dt: self._on_long_press(col, touch.x, touch.y, dt), 0.5)
                 touch.grab(self)
-            return False
+            return True  # 消费 touch 事件，防止穿透
 
         # 记录起始位置（用于区分点击 vs 拖拽）
         self._touch_start_pos = (touch.x, touch.y)
@@ -896,12 +921,19 @@ class BoardWidget(Widget):
         self._drag_idx = idx
         self._drag_offset = (touch.x - hit['x'], touch.y - hit['y'])
 
-        # ★ 关键：将拖拽的卡牌移到最上层（z-order）
+        # ★ 关键：将拖拽的卡牌移到最上层（z-order）并记录原始位置
         drag_infos = [info2 for info2 in self._card_map
                       if info2['col'] == col and info2['idx'] >= idx]
+        self._drag_widgets = []
         for info2 in drag_infos:
             w = info2['widget']
             w.selected = True
+            # 记录原始位置用于平滑拖动
+            self._drag_widgets.append({
+                'widget': w,
+                'orig_x': w.x,
+                'orig_y': w.y
+            })
             # remove 再 add → 移到 widget 树最后 → 画在最上面
             self.remove_widget(w)
             self.add_widget(w)
@@ -918,20 +950,23 @@ class BoardWidget(Widget):
             return False
 
         ox, oy = self._drag_offset
-        base_x = touch.x - ox
-        base_y = touch.y - oy
+        dx = touch.x - self._touch_start_pos[0]
+        dy = touch.y - self._touch_start_pos[1]
 
+        # 平滑拖动：只更新 widget 位置，不重绘整个棋盘
         first = True
-        prev_y = base_y
-        for info in self._card_map:
-            if info['col'] == self._drag_col and info['idx'] >= self._drag_idx:
-                w = info['widget']
-                if first:
-                    w.pos = (base_x, base_y)
-                    first = False
-                else:
-                    prev_y -= CARD_OVERLAP_OPEN
-                    w.pos = (base_x, prev_y)
+        prev_dy = dy
+        for drag_info in self._drag_widgets:
+            w = drag_info['widget']
+            if first:
+                w.pos = (drag_info['orig_x'] + dx, drag_info['orig_y'] + dy)
+                # 添加视觉反馈：轻微降低透明度和缩放
+                w.opacity = 0.85
+                first = False
+            else:
+                prev_dy -= CARD_OVERLAP_OPEN
+                w.pos = (drag_info['orig_x'] + dx, drag_info['orig_y'] + prev_dy)
+                w.opacity = 0.85
         return True
 
     def on_touch_up(self, touch):
@@ -956,8 +991,21 @@ class BoardWidget(Widget):
 
         moved = False
         if is_tap:
-            # 点击自动移动：随机选一个合法目标列
-            target = self._find_random_auto_target(from_col, from_idx)
+            # 点击自动移动：经典行为 — 移动整个同花色序列（从 movable_start 开始）
+            # 这样玩家点击序列中任意一张牌都能移动整组
+            column = gs.columns[from_col]
+            movable_start = self._find_movable_start(column)
+            tap_idx = movable_start if from_idx >= movable_start else from_idx
+            target = self._find_best_auto_target(from_col, tap_idx)
+            # 如果整组移不了，尝试只移动玩家点击的部分
+            if target is None and tap_idx != from_idx:
+                target = self._find_best_auto_target(from_col, from_idx)
+                if target is not None:
+                    tap_idx = from_idx
+            from_idx = tap_idx  # 更新为实际移动的起始索引
+            if target is None:
+                # 没有合法目标 → 轻微抖动反馈
+                self._play_shake_feedback(from_col, from_idx)
             if target is not None:
                 # 记录牌飞行前的位置信息
                 fly_infos = [
@@ -1004,15 +1052,74 @@ class BoardWidget(Widget):
                     self._play_complete_animation(target, len(gs.completed) - 1)
                     return True
 
+        # 拖动失败 — 回弹动画（不是瞬间跳回，让玩家感觉自然）
+        if not moved and not is_tap and self._drag_widgets:
+            self._play_snap_back_animation()
+            return True
+
         self._dragging = False
         self._drag_col = None
         self._drag_idx = None
         self._touch_start_pos = None
+        self._drag_widgets = []
+
+        # 恢复拖拽中的卡牌透明度
+        for info in self._card_map:
+            info['widget'].opacity = 1.0
+            info['widget'].selected = False
+
         self.redraw()
 
         if moved:
             self._notify_state_updated()
         return True
+
+    def _play_snap_back_animation(self):
+        """拖动到无效位置时，卡牌平滑回弹到原位"""
+        from kivy.animation import Animation
+        anim_widgets = []
+        for dw in self._drag_widgets:
+            w = dw['widget']
+            orig_x = dw['orig_x']
+            orig_y = dw['orig_y']
+            anim = Animation(x=orig_x, y=orig_y, opacity=1.0, duration=0.12, t='out_quad')
+            anim.start(w)
+            anim_widgets.append(w)
+
+        # 回弹完成后重绘
+        def _on_snap_done(*a):
+            self._dragging = False
+            self._drag_col = None
+            self._drag_idx = None
+            self._touch_start_pos = None
+            self._drag_widgets = []
+            for info in self._card_map:
+                info['widget'].selected = False
+            self.redraw()
+
+        from kivy.clock import Clock
+        Clock.schedule_once(_on_snap_done, 0.15)
+
+    def _play_shake_feedback(self, col_idx, card_idx):
+        """点击无效时，卡牌轻微左右抖动，提示玩家"无处可去""""
+        from kivy.animation import Animation
+        gs = self.game_state
+        col = gs.columns[col_idx] if gs else []
+        widgets = [
+            info['widget'] for info in self._card_map
+            if info['col'] == col_idx and info['idx'] >= card_idx
+            and info['idx'] < len(col) and col[info['idx']].face_up
+        ]
+        if not widgets:
+            return
+        shake = dp(4)
+        for w in widgets:
+            ox = w.x
+            anim = (Animation(x=ox + shake, duration=0.04) +
+                    Animation(x=ox - shake, duration=0.04) +
+                    Animation(x=ox + shake * 0.5, duration=0.03) +
+                    Animation(x=ox, duration=0.03))
+            anim.start(w)
 
     def _find_target_column(self, tx):
         """找到离松手位置最近的列，容差放宽到卡牌宽度的 2.5 倍"""
@@ -1027,12 +1134,16 @@ class BoardWidget(Widget):
                 best = i
         return best
 
-    def _find_random_auto_target(self, from_col, card_idx):
-        """为点击自动移动随机选一个合法目标列
+    def _find_best_auto_target(self, from_col, card_idx):
+        """为点击自动移动选择最优目标列
 
-        收集所有合法目标，随机选一个返回。如果无合法移动返回 None。
+        评分策略：
+        1. 同花色移动：+100（最高优先级）
+        2. 非空有效目标：+10
+        3. 空列移动：+5（最低优先级）
+
+        返回最高评分的目标列，或 None。
         """
-        import random as _rnd
         gs = self.game_state
         if not gs:
             return None
@@ -1042,15 +1153,33 @@ class BoardWidget(Widget):
             return None
 
         candidates = []
+        moving_card = moving_seq[0]
+
         for col_idx in range(10):
             if col_idx == from_col:
                 continue
             if gs.can_move(from_col, card_idx, col_idx):
-                candidates.append(col_idx)
+                score = 0
+                target_col = gs.columns[col_idx]
+
+                # 同花色 - 最高优先级
+                if target_col and target_col[-1].suit == moving_card.suit:
+                    score += 100
+                # 非空有效目标
+                elif target_col:
+                    score += 10
+                # 空列 - 最低优先级
+                else:
+                    score += 5
+
+                candidates.append((score, col_idx))
 
         if not candidates:
             return None
-        return _rnd.choice(candidates)
+
+        # 按评分从高到低排序，返回最高分
+        candidates.sort(key=lambda x: -x[0])
+        return candidates[0][1]
 
     def _play_auto_move_animation(self, src_positions, target_col, card_idx):
         """点击自动移动的飞牌动画
@@ -1119,6 +1248,155 @@ class BoardWidget(Widget):
                 self.remove_widget(lbl)
         Clock.schedule_once(_remove, 1.5)
 
+    # ========== 移动提示系统 ==========
+
+    def reset_hints(self):
+        """重置提示（在棋盘改变后调用）"""
+        self._hint_moves = []
+        self._hint_index = -1
+        self._clear_hint_highlight()
+
+    def _clear_hint_highlight(self):
+        """清除高亮"""
+        # 从 canvas 中移除高亮指令
+        for instruction in self._hint_highlight:
+            try:
+                self.canvas.remove(instruction)
+            except:
+                pass
+        self._hint_highlight = []
+
+    def show_next_hint(self):
+        """显示下一个提示，循环遍历可用的移动"""
+        gs = self.game_state
+        if not gs:
+            return
+
+        # 清除前一个提示
+        self._clear_hint_highlight()
+
+        # 如果需要则重新生成提示
+        if not self._hint_moves:
+            self._hint_moves = gs.get_all_possible_moves()
+            self._hint_index = -1
+
+        if not self._hint_moves:
+            self._show_hint('没有可用的移动')
+            return
+
+        self._hint_index = (self._hint_index + 1) % len(self._hint_moves)
+        from_col, card_idx, to_col, score = self._hint_moves[self._hint_index]
+
+        # 绘制高亮
+        self._draw_hint_highlight(from_col, card_idx, to_col)
+
+        # 显示提示信息
+        hint_num = self._hint_index + 1
+        total_moves = len(self._hint_moves)
+        self._show_hint(f'提示 {hint_num}/{total_moves}')
+
+    def _draw_hint_highlight(self, from_col, card_idx, to_col):
+        """绘制源和目标的高亮
+
+        参数：
+            from_col: 源列索引
+            card_idx: 源列中的卡牌索引
+            to_col: 目标列索引
+        """
+        gs = self.game_state
+        if not gs or from_col >= len(gs.columns) or to_col >= len(gs.columns):
+            return
+
+        col_x_from = self._column_positions[from_col]
+        col_x_to = self._column_positions[to_col]
+        cw, ch = self._cw, self._ch
+
+        # 计算源列中该卡牌的 Y 坐标
+        from_column = gs.columns[from_col]
+        if card_idx >= len(from_column):
+            return
+
+        # 计算源列中要移动的卡牌的数量
+        num_cards = len(from_column) - card_idx
+
+        # 计算重叠距离来确定卡牌位置
+        available = self._top_y - self._bottom_y
+        overlaps = self._calc_column_overlaps(from_column, available)
+
+        # 计算源卡牌的Y位置
+        cy = self._top_y
+        for i in range(card_idx):
+            if i < len(overlaps):
+                cy -= overlaps[i]
+
+        # 计算源牌高亮区域的实际高度（用真实重叠距离，不是满卡高度）
+        highlight_h = ch  # 至少一张牌的高度
+        if num_cards > 1:
+            actual_overlap_sum = sum(overlaps[i] for i in range(card_idx, min(card_idx + num_cards - 1, len(overlaps))))
+            highlight_h = actual_overlap_sum + ch
+
+        # 绘制源列高亮（绿色）
+        with self.canvas:
+            Color(0.2, 0.8, 0.2, 0.4)  # 半透明绿色
+            source_rect = RoundedRectangle(
+                pos=(col_x_from, cy - highlight_h + ch),
+                size=(cw, highlight_h),
+                radius=[self._cr]
+            )
+            self._hint_highlight.append(source_rect)
+
+        # 绘制目标列高亮（黄色）
+        to_column = gs.columns[to_col]
+        if to_column:
+            # 目标列非空：用实际重叠计算目标位置
+            to_overlaps = self._calc_column_overlaps(to_column, available)
+            target_y = self._top_y
+            for i in range(len(to_column)):
+                if i < len(to_overlaps):
+                    target_y -= to_overlaps[i]
+        else:
+            # 目标列为空
+            target_y = self._top_y
+
+        with self.canvas:
+            Color(1.0, 1.0, 0.2, 0.4)  # 半透明黄色
+            target_rect = RoundedRectangle(
+                pos=(col_x_to, target_y - ch),
+                size=(cw, ch),
+                radius=[self._cr]
+            )
+            self._hint_highlight.append(target_rect)
+
+    # ========== 状态更新 ==========
+
     def _notify_state_updated(self):
+        self.reset_hints()
         if self.on_state_updated:
             self.on_state_updated()
+        # 检测死局：没有可走步骤 且 无法发牌
+        self._check_stuck()
+
+    def _check_stuck(self):
+        """检测是否进入死局（无路可走）
+
+        只在 stock 完全空时才执行（避免每次移牌的性能开销）。
+        延迟到下一帧执行，不阻塞当前渲染。
+        """
+        gs = self.game_state
+        if not gs or gs.is_won():
+            return
+        # 还能发牌则不算死局，直接返回（O(1)）
+        if gs.stock:
+            return
+        # stock 空了，延迟检查以免阻塞当前帧
+        from kivy.clock import Clock
+        Clock.schedule_once(lambda dt: self._do_stuck_check(), 0.1)
+
+    def _do_stuck_check(self):
+        """实际执行死局检测（延迟调用）"""
+        gs = self.game_state
+        if not gs or gs.is_won() or gs.stock:
+            return
+        moves = gs.get_all_possible_moves()
+        if not moves:
+            self._show_hint('无法继续，试试撤销或开始新游戏')

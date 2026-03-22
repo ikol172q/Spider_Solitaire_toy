@@ -259,14 +259,12 @@ class TestDeckRandomSuits(unittest.TestCase):
             suit = next(iter(set(c.suit for c in deck)))
             self.assertIn(suit, ALL_SUITS)
 
-    def test_easy_can_choose_non_spade(self):
-        """初级：多次创建，应该有机会选到非黑桃花色（概率极高）"""
-        suits_seen = set()
-        for _ in range(100):
+    def test_easy_always_spade(self):
+        """初级：经典设计，固定使用黑桃"""
+        for _ in range(20):
             deck = create_deck('easy')
-            suits_seen.update(c.suit for c in deck)
-        # 100次中至少出现过2种不同的花色（4选1，不出现第二种的概率 = (1/4)^99 ≈ 0）
-        self.assertGreater(len(suits_seen), 1)
+            suits_used = set(c.suit for c in deck)
+            self.assertEqual(suits_used, {'spade'})
 
     def test_medium_always_two_suits(self):
         """中级：始终只有2种花色，各52张"""
@@ -277,14 +275,12 @@ class TestDeckRandomSuits(unittest.TestCase):
             for cnt in counts.values():
                 self.assertEqual(cnt, 52)
 
-    def test_medium_can_choose_different_pairs(self):
-        """中级：多次创建，应该出现不同的花色组合"""
-        combos_seen = set()
-        for _ in range(100):
+    def test_medium_always_spade_heart(self):
+        """中级：经典设计，固定使用黑桃和红心"""
+        for _ in range(20):
             deck = create_deck('medium')
-            combo = frozenset(c.suit for c in deck)
-            combos_seen.add(combo)
-        self.assertGreater(len(combos_seen), 1)
+            suits_used = set(c.suit for c in deck)
+            self.assertEqual(suits_used, {'spade', 'heart'})
 
     def test_hard_always_four_suits(self):
         """高级：始终4种花色，各26张"""

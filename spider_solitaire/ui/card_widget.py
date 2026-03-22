@@ -8,7 +8,7 @@ from kivy.metrics import dp
 from .theme import (
     CARD_COLOR, CARD_BACK_COLOR, RED_SUIT_COLOR, BLACK_SUIT_COLOR,
     CARD_WIDTH, CARD_HEIGHT, CARD_RADIUS, FONT_SIZE_SUIT,
-    FONT_SIZE_SMALL, TEXT_COLOR, HIGHLIGHT_COLOR
+    FONT_SIZE_SMALL, TEXT_COLOR, HIGHLIGHT_COLOR, SUIT_COLORS
 )
 from ..game.card import SUITS, RANK_NAMES
 
@@ -41,10 +41,10 @@ class CardWidget(Widget):
         cw = self._card_width
         if compact:
             self._font_rank = cw * 0.38
-            self._font_suit = cw * 0.50
+            self._font_suit = cw * 0.65
         else:
             self._font_rank = cw * 0.45
-            self._font_suit = cw * 0.62
+            self._font_suit = cw * 0.80
 
         # 文字 Label 引用
         self._rank_label = None
@@ -80,9 +80,7 @@ class CardWidget(Widget):
 
     def _get_suit_color(self):
         """根据花色返回颜色"""
-        if self.card.suit in ('heart', 'diamond'):
-            return RED_SUIT_COLOR
-        return BLACK_SUIT_COLOR
+        return SUIT_COLORS.get(self.card.suit, BLACK_SUIT_COLOR)
 
     def _draw_face(self):
         """绘制卡牌正面"""
@@ -109,9 +107,10 @@ class CardWidget(Widget):
         suit_sym = SUITS[self.card.suit]
         rank_name = RANK_NAMES[self.card.rank]
         base_color = self._get_suit_color()
-        # 低亮时颜色变淡
+        # 低亮时颜色变暗（保持足够对比度，WCAG AA 要求 4.5:1）
+        # 灰色背景 (0.82,0.82,0.80) 上，文字需要足够深
         if dim:
-            color = tuple(c * 0.5 + 0.3 for c in base_color[:3]) + (0.7,)
+            color = tuple(c * 0.35 + 0.15 for c in base_color[:3]) + (0.85,)
         else:
             color = base_color
 
@@ -137,7 +136,7 @@ class CardWidget(Widget):
             font_size=self._font_suit,
             color=color,
             size_hint=(None, None),
-            size=(self.width, self.height * 0.45),
+            size=(self.width, self.height * 0.55),
             pos=(self.x, self.y + self.height * 0.02),
             halign='center',
             valign='middle'

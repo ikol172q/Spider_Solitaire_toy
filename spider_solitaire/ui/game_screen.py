@@ -7,6 +7,7 @@ from kivy.uix.button import Button
 from kivy.uix.popup import Popup
 from kivy.clock import Clock
 from kivy.graphics import Color, Rectangle
+from kivy.metrics import dp
 
 from .board_widget import BoardWidget
 from .theme import (
@@ -193,13 +194,17 @@ class GameScreen(Screen):
                          background_color=BUTTON_COLOR, size_hint_x=w)
             btn.bind(on_press=cb)
             bar.add_widget(btn)
+            if text == '撤销':
+                self._undo_btn = btn
+                btn.disabled = True
+                btn.opacity = 0.5
 
-        # 点击自动移动 开关按钮
-        self._auto_move_on = False
+        # 点击自动移动 开关按钮（经典蜘蛛纸牌核心交互，默认开启）
+        self._auto_move_on = True
         self._auto_btn = Button(
-            text='自动：关', font_name=CJK,
+            text='自动：开', font_name=CJK,
             font_size=FONT_SIZE_NORMAL,
-            background_color=(0.4, 0.4, 0.4, 1),
+            background_color=(0.2, 0.6, 0.2, 1),
             size_hint_x=0.2)
         self._auto_btn.bind(on_press=self._toggle_auto_move)
         bar.add_widget(self._auto_btn)
@@ -213,6 +218,14 @@ class GameScreen(Screen):
             size_hint_x=0.2)
         self._hint_btn.bind(on_press=self._toggle_card_hints)
         bar.add_widget(self._hint_btn)
+
+        # 提示按钮
+        hint_btn = Button(text='提示', font_name=CJK,
+                          font_size=FONT_SIZE_NORMAL,
+                          size_hint_x=None, width=dp(55),
+                          background_color=(0.6, 0.4, 0.1, 1))
+        hint_btn.bind(on_release=self._on_hint_pressed)
+        bar.add_widget(hint_btn)
 
         return bar
 
@@ -241,6 +254,10 @@ class GameScreen(Screen):
         self.board.show_card_hints = self._hint_on
         self.board.redraw()
 
+    def _on_hint_pressed(self, _btn):
+        """显示下一个提示"""
+        self.board.show_next_hint()
+
     # ---- 刷新 ----
     def _refresh_labels(self):
         gs = self.game_state
@@ -248,6 +265,14 @@ class GameScreen(Screen):
             return
         self.lbl_score.text = str(gs.score)
         self.lbl_moves.text = str(gs.moves)
+        # 撤销按钮：历史为空时变灰，有历史时恢复
+        if hasattr(self, '_undo_btn'):
+            if gs.history:
+                self._undo_btn.disabled = False
+                self._undo_btn.opacity = 1.0
+            else:
+                self._undo_btn.disabled = True
+                self._undo_btn.opacity = 0.5
 
     def _tick(self, dt):
         gs = self.game_state
@@ -256,7 +281,8 @@ class GameScreen(Screen):
         gs.update_elapsed_time()
         m, s = divmod(gs.elapsed_time, 60)
         self.lbl_time.text = f"{m:02d}:{s:02d}"
-        if gs.is_won():
+        # 胜利检测：等动画结束后再弹出，避免动画中弹窗
+        if gs.is_won() and not self.board._animating:
             self._show_win()
 
     # ---- 按钮回调 ----

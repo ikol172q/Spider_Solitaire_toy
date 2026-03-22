@@ -19,13 +19,12 @@ def create_deck(difficulty):
         包含104张Card对象的列表
     """
     if difficulty == 'easy':
-        # 随机选1种花色，8套
-        chosen = random.sample(ALL_SUITS, 1)
-        suits = chosen * 8
+        # 经典设计：只用黑桃，8套
+        suits = ['spade'] * 8
     elif difficulty == 'medium':
-        # 随机选2种花色，各4套
-        chosen = random.sample(ALL_SUITS, 2)
-        suits = chosen * 4
+        # 经典设计：固定用黑桃(黑)和红心(红)，各4套
+        # Windows 经典蜘蛛纸牌中级一直使用这两种花色，一黑一红天然易区分
+        suits = ['spade', 'heart'] * 4
     elif difficulty == 'hard':
         # 4种花色，各2套
         suits = ALL_SUITS * 2
