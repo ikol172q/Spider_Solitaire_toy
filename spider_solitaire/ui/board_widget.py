@@ -1101,7 +1101,7 @@ class BoardWidget(Widget):
         Clock.schedule_once(_on_snap_done, 0.15)
 
     def _play_shake_feedback(self, col_idx, card_idx):
-        """点击无效时，卡牌轻微左右抖动，提示玩家"无处可去""""
+        """点击无效时，卡牌轻微左右抖动，提示玩家「无处可去」。"""
         from kivy.animation import Animation
         gs = self.game_state
         col = gs.columns[col_idx] if gs else []
